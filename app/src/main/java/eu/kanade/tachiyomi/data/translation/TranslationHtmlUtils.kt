@@ -12,6 +12,8 @@ import org.jsoup.parser.Parser
  */
 object TranslationHtmlUtils {
 
+    private const val SOURCE_HASH_COMMENT_PREFIX = "<!-- tsundoku-source-hash:"
+
     // ── Image / media preservation ──────────────────────────────────
 
     /** CSS selector for elements that must survive the translate round-trip. */
@@ -48,6 +50,17 @@ object TranslationHtmlUtils {
         return result
     }
 
+    /**
+     * Normalize line-break variants so paragraph handling is stable.
+     */
+    fun normalizeLineBreaks(text: String): String {
+        return text
+            .replace("\r\n", "\n")
+            .replace('\r', '\n')
+            .replace('\u2028', '\n')
+            .replace('\u2029', '\n')
+    }
+
     // ── Text ↔ HTML conversion ──────────────────────────────────────
 
     /**
@@ -72,9 +85,10 @@ object TranslationHtmlUtils {
             }
         }
 
-        return doc.text()
-            // Normalise whitespace produced by Jsoup's .text()
-            .replace(Regex("[ \\t]+"), " ")
+        return normalizeLineBreaks(doc.body().wholeText())
+            .replace(Regex("[ \\t\\u000B\\f]+"), " ")
+            .replace(Regex("\\n[ \\t]+"), "\n")
+            .replace(Regex("[ \\t]+\\n"), "\n")
             .replace(Regex("\n{3,}"), "\n\n")
             .trim()
     }
@@ -83,12 +97,14 @@ object TranslationHtmlUtils {
      * Wrap plain text (paragraphs separated by `\n\n`) back into `<p>` elements.
      */
     fun wrapTextInHtml(text: String): String {
-        return text
-            .split("\n\n")
-            .filter { it.isNotBlank() }
+        return splitParagraphsPreserving(text)
             .joinToString("") { paragraph ->
-                "<p>${escapeHtml(paragraph.trim()).replace("\n", "<br/>")}</p>"
+                "<p>${escapeHtml(normalizeLineBreaks(paragraph).trim()).replace("\n", "<br/>")}</p>"
             }
+    }
+
+    fun hasSourceHashTag(content: String): Boolean {
+        return content.startsWith(SOURCE_HASH_COMMENT_PREFIX)
     }
 
     /**
@@ -172,5 +188,20 @@ object TranslationHtmlUtils {
             .replace("<", "&lt;")
             .replace(">", "&gt;")
             .replace("\"", "&quot;")
+    }
+
+    /**
+     * Split translated text into paragraphs while being robust to model output.
+     * Prefer splitting on two-or-more newlines; if none are present, fall back
+     * to single-line breaks so models that preserve only single newlines still
+     * return sensible paragraphs.
+     */
+    fun splitParagraphsPreserving(text: String): List<String> {
+        if (text.isBlank()) return emptyList()
+        val normalized = normalizeLineBreaks(text)
+        val byDouble = normalized.split(Regex("\n{2,}")).map { it.trim() }.filter { it.isNotBlank() }
+        if (byDouble.size > 1) return byDouble
+        // Fallback to single-line breaks
+        return normalized.split(Regex("\n")).map { it.trim() }.filter { it.isNotBlank() }
     }
 }
