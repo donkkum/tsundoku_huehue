@@ -523,13 +523,6 @@ class MassImportJob(private val context: Context, workerParams: WorkerParameters
 
                     waitForMemoryPressure()
 
-                    activeImports[url] = true
-                    updateNotification(
-                        completedCount.get(),
-                        totalCount,
-                        "Processing: ${activeImports.size} active",
-                    )
-
                     var erroredThisUrl = false
                     var cancelledWhileQueued = false
                     try {
@@ -553,6 +546,12 @@ class MassImportJob(private val context: Context, workerParams: WorkerParameters
                                         BatchStatus.Paused -> false
                                         else -> {
                                             delay(delayMs)
+                                            activeImports[url] = true
+                                            updateNotification(
+                                                completedCount.get(),
+                                                totalCount,
+                                                "Processing: ${activeImports.size} active",
+                                            )
                                             result = processUrlWithSource(
                                                 url, source, addToLibrary, fetchDetails, categoryId,
                                                 fetchChapters, pendingAddIds, flushBatchSize,
@@ -567,6 +566,12 @@ class MassImportJob(private val context: Context, workerParams: WorkerParameters
                             if (!awaitResumed(batchId)) {
                                 null
                             } else {
+                                activeImports[url] = true
+                                updateNotification(
+                                    completedCount.get(),
+                                    totalCount,
+                                    "Processing: ${activeImports.size} active",
+                                )
                                 processUrlWithSource(
                                     url, source, addToLibrary, fetchDetails, categoryId,
                                     fetchChapters, pendingAddIds, flushBatchSize,
