@@ -657,6 +657,10 @@ class NovelViewer(val activity: ReaderActivity) : Viewer {
 
     private var pendingTtsAutoStart = false
 
+    // Set when an inf-scroll TTS handoff found nothing prefetched and kicked a prefetch;
+    // the prefetch completion retries the handoff.
+    private var pendingTtsHandoffAfterPrefetch = false
+
     @Volatile private var handoffState: TtsHandoffState<LoadedChapter> = TtsHandoffState.Idle
 
     private val ttsController = TtsController(
@@ -788,17 +792,28 @@ class NovelViewer(val activity: ReaderActivity) : Viewer {
                     startTts()
                 }
             } else {
-                logcat(LogPriority.WARN) { "TTS: No next chapter in loadedChapters or cache for inf-scroll handoff" }
+                // Nothing prefetched: TTS reads in place, so the scroll-driven prefetch never
+                // fired. Fetch the next chapter now and retry the handoff once it's cached.
+                logcat(LogPriority.DEBUG) { "TTS: next chapter not ready, prefetching for handoff" }
+                pendingTtsHandoffAfterPrefetch = true
+                preFetchNextChapterForTts()
             }
             return
         }
 
         val chapters = currentChapters ?: return
-        chapters.nextChapter ?: return
+        if (chapters.nextChapter == null) {
+            // End of novel: stop so the background service tears down instead of
+            // lingering with isTtsAutoPlay stuck true.
+            stopTts()
+            return
+        }
 
         pendingTtsAutoStart = true
         scope.launch {
-            activity.loadNextChapter()
+            // Must NOT use activity.loadNextChapter(): it stops TTS (manual-nav)
+            // and clears pendingTtsAutoStart, so playback never resumes.
+            activity.loadNextChapterForTtsHandoff()
         }
     }
 
@@ -866,9 +881,20 @@ class NovelViewer(val activity: ReaderActivity) : Viewer {
                     )
                     handoffState = TtsHandoffState.Cached(cachedChapter)
                     logcat(LogPriority.DEBUG) { "TTS: Cached next chapter ${preparedChapter.chapter.name}" }
+
+                    if (pendingTtsHandoffAfterPrefetch) {
+                        pendingTtsHandoffAfterPrefetch = false
+                        loadNextChapterForTts(currentChapterIndex)
+                    }
                 }
             } finally {
                 if (handoffState.isPreFetching) handoffState = TtsHandoffState.Idle
+                // Flag still set: prefetch ended without caching (fetch failed or no next
+                // chapter). Stop instead of leaving isTtsAutoPlay stuck true.
+                if (pendingTtsHandoffAfterPrefetch) {
+                    pendingTtsHandoffAfterPrefetch = false
+                    stopTts()
+                }
             }
         }
     }
@@ -958,7 +984,10 @@ class NovelViewer(val activity: ReaderActivity) : Viewer {
         val text = loadedChapters.getOrNull(currentChapterIndex)?.block?.fullText
             ?: loadedChapters.firstOrNull()?.block?.fullText
         if (text.isNullOrEmpty()) {
-            logcat(LogPriority.WARN) { "TTS: No text to speak. loadedChapters=${loadedChapters.size}, currentIndex=$currentChapterIndex" }
+            // Chapter text hasn't rendered yet; defer so onChapterTextSet starts playback
+            // once it's ready instead of failing the start silently.
+            logcat(LogPriority.WARN) { "TTS: text not ready, deferring start. loadedChapters=${loadedChapters.size}, currentIndex=$currentChapterIndex" }
+            pendingTtsAutoStart = true
             return
         }
         logcat(LogPriority.DEBUG) { "TTS: Starting to speak ${text.length} characters" }
@@ -974,6 +1003,18 @@ class NovelViewer(val activity: ReaderActivity) : Viewer {
         pendingTtsAutoStart = false
         handoffState = TtsHandoffState.Idle
         ttsController.stop()
+    }
+
+    /**
+     * A deferred TTS start ([pendingTtsAutoStart]) waits for [onChapterTextSet], which
+     * never fires when the chapter fails to load. Clear the pending session so
+     * isTtsAutoPlay doesn't stay stuck true (which would keep the background
+     * notification/service alive with nothing playing).
+     */
+    private fun abortPendingTtsOnLoadFailure() {
+        if (pendingTtsAutoStart || ttsController.isTtsAutoPlay) {
+            stopTts()
+        }
     }
 
     fun pauseTts() {
@@ -1019,7 +1060,9 @@ class NovelViewer(val activity: ReaderActivity) : Viewer {
         val text = loadedChapters.getOrNull(currentChapterIndex)?.block?.fullText
             ?: loadedChapters.firstOrNull()?.block?.fullText
         if (text.isNullOrEmpty()) {
-            logcat(LogPriority.WARN) { "TTS: No text available for viewport start" }
+            // Chapter text not rendered yet; defer to onChapterTextSet rather than no-op.
+            logcat(LogPriority.WARN) { "TTS: text not ready for viewport start, deferring" }
+            pendingTtsAutoStart = true
             return
         }
         val firstVisibleParagraphIndex = findFirstVisibleParagraphIndex(text)
@@ -1178,6 +1221,7 @@ class NovelViewer(val activity: ReaderActivity) : Viewer {
                 }
             } catch (e: TimeoutCancellationException) {
                 hideLoadingIndicator()
+                abortPendingTtsOnLoadFailure()
                 displayError(e)
                 return@launch
             }
@@ -1190,6 +1234,7 @@ class NovelViewer(val activity: ReaderActivity) : Viewer {
                 }
                 is Page.State.Error -> {
                     hideLoadingIndicator()
+                    abortPendingTtsOnLoadFailure()
                     displayError(state.error)
                 }
                 else -> {}
@@ -1201,6 +1246,7 @@ class NovelViewer(val activity: ReaderActivity) : Viewer {
         val rawContent = page.text
         if (rawContent.isNullOrBlank()) {
             logcat(LogPriority.ERROR) { "NovelViewer: Page text is null or blank for chapter ${chapter.chapter.name}" }
+            abortPendingTtsOnLoadFailure()
             displayError(Exception(activity.stringResource(TDMR.strings.novel_error_empty_chapter)))
             return
         }

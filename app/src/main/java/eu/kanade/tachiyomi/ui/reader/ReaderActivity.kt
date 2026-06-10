@@ -668,19 +668,20 @@ class ReaderActivity : BaseActivity() {
             var isTtsActive by remember { mutableStateOf(false) }
             var isTtsPaused by remember { mutableStateOf(false) }
             var ttsControlsVisible by remember { mutableStateOf(readerPreferences.novelTtsControlsVisible.get()) }
-            LaunchedEffect(state.menuVisible) {
-                if (state.menuVisible) {
-                    val viewer = state.viewer
-                    isTtsActive = when (viewer) {
-                        is NovelViewer -> viewer.isTtsSpeaking() || viewer.isTtsPaused()
-                        is NovelWebViewViewer -> viewer.isTtsSpeaking() || viewer.isTtsPaused()
-                        else -> false
-                    }
-                    isTtsPaused = when (viewer) {
-                        is NovelViewer -> viewer.isTtsPaused()
-                        is NovelWebViewViewer -> viewer.isTtsPaused()
-                        else -> false
-                    }
+            // Re-sync the pause/play button on menu open and chapter change. Chapter nav
+            // stops TTS without a button tap, so key on chapter id to reset it.
+            LaunchedEffect(state.menuVisible, state.novelVisibleChapter?.id) {
+                if (!state.menuVisible) return@LaunchedEffect
+                val viewer = state.viewer
+                isTtsActive = when (viewer) {
+                    is NovelViewer -> viewer.isTtsActive()
+                    is NovelWebViewViewer -> viewer.isTtsActive()
+                    else -> false
+                }
+                isTtsPaused = when (viewer) {
+                    is NovelViewer -> viewer.isTtsPaused()
+                    is NovelWebViewViewer -> viewer.isTtsPaused()
+                    else -> false
                 }
             }
 
@@ -1102,7 +1103,8 @@ class ReaderActivity : BaseActivity() {
 
     private fun startBackgroundTtsIfEnabled() {
         if (readerPreferences.novelTtsBackgroundPlayback.get()) {
-            TtsPlaybackService.start(this)
+            // No placeholder notification: the caller's syncBackgroundTtsState() starts
+            // the service with the real novel/chapter title.
             startTtsNotificationSync()
         }
     }
@@ -1139,8 +1141,13 @@ class ReaderActivity : BaseActivity() {
     private fun startTtsNotificationSync() {
         ttsNotificationSyncJob?.cancel()
         ttsNotificationSyncJob = lifecycleScope.launch {
+            // First pass runs before the caller sets TTS state. Don't stop the service
+            // until TTS has been active once: stopping it before startForeground() crashes
+            // with ForegroundServiceDidNotStartInTimeException.
+            var ttsWasActive = false
             while (isActive) {
-                syncBackgroundTtsState()
+                if (currentNovelTtsState()?.active == true) ttsWasActive = true
+                if (ttsWasActive) syncBackgroundTtsState()
                 delay(750)
             }
         }
@@ -1375,6 +1382,19 @@ class ReaderActivity : BaseActivity() {
      */
     internal fun loadNextChapter() {
         stopNovelTtsForManualNav()
+        loadNextChapterInternal()
+    }
+
+    /**
+     * Loads the next chapter for a TTS auto-advance without stopping TTS. The viewer
+     * has set pendingTtsAutoStart and needs it to survive the chapter swap so playback
+     * resumes; [loadNextChapter] would clear it via [stopNovelTtsForManualNav].
+     */
+    internal fun loadNextChapterForTtsHandoff() {
+        loadNextChapterInternal()
+    }
+
+    private fun loadNextChapterInternal() {
         lifecycleScope.launch {
             viewModel.loadNextChapter()
             // Only reset to page 0 if NOT using infinite scroll for novel viewers

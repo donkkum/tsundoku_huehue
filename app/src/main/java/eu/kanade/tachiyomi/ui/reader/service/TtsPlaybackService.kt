@@ -240,18 +240,6 @@ class TtsPlaybackService : Service() {
         private const val EXTRA_MANGA_ID = "extra_manga_id"
         private const val EXTRA_CHAPTER_ID = "extra_chapter_id"
 
-        fun start(context: Context) {
-            syncState(
-                context = context,
-                isPaused = false,
-                progressPercent = 0,
-                novelTitle = "TTS playback",
-                chapterTitle = "",
-                mangaId = -1L,
-                chapterId = -1L,
-            )
-        }
-
         fun syncState(
             context: Context,
             isPaused: Boolean,

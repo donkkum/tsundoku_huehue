@@ -129,6 +129,9 @@ class NovelWebViewViewer(val activity: ReaderActivity) : Viewer {
     // True only while loadHtmlContent() has called loadDataWithBaseURL for real chapter content
     // (not the loading-indicator page). Lets onPageFinished distinguish real vs loading loads.
     private var isLoadingRealChapter = false
+    // False while the loading indicator is up or real content is still loading; true once real
+    // chapter content has finished rendering. Guards TTS from reading the loading placeholder.
+    private var webChapterContentReady = false
 
     private val ttsController: TtsController
 
@@ -350,11 +353,18 @@ class NovelWebViewViewer(val activity: ReaderActivity) : Viewer {
                 setPendingTtsHandoffTimeout()
             } else {
                 val chapters = currentChapters ?: return@launch
-                chapters.nextChapter ?: return@launch
+                if (chapters.nextChapter == null) {
+                    // End of novel: stop so the background service tears down instead of
+                    // lingering with isTtsAutoPlay stuck true.
+                    stopTts()
+                    return@launch
+                }
                 // Use a viewer-owned flag so ttsController.stop() (called from setChapters)
                 // cannot clear it before onPageFinished fires.
                 pendingTtsAutoStartOnLoad = true
-                activity.loadNextChapter()
+                // Must NOT use activity.loadNextChapter(): stopNovelTtsForManualNav() →
+                // stopTts() clears pendingTtsAutoStartOnLoad, so playback never resumes.
+                activity.loadNextChapterForTtsHandoff()
             }
         }
     }
@@ -421,14 +431,22 @@ class NovelWebViewViewer(val activity: ReaderActivity) : Viewer {
         // Cancel any prior timeout regardless of state.
         handoffState.timeoutJob?.cancel()
 
+        val loadedCountAtSchedule = loadedChapters.size
         val timeoutJob = scope.launch {
             delay(5000L)
             if (handoffState.isAppending) {
-                logcat(LogPriority.WARN) {
-                    "TTS (WebView): Handoff timeout after 5000ms; clearing pending state and resuming playback"
-                }
                 clearPendingTtsHandoff()
-                if (ttsController.isTtsAutoPlay && !ttsController.isSpeaking()) {
+                if (loadedChapters.size <= loadedCountAtSchedule) {
+                    // No new chapter appended (end of novel or fetch failure). Restarting
+                    // would re-read the finished chapter on a loop, so stop instead.
+                    logcat(LogPriority.WARN) {
+                        "TTS (WebView): Handoff timeout, no next chapter appended; stopping playback"
+                    }
+                    stopTts()
+                } else if (ttsController.isTtsAutoPlay && !ttsController.isSpeaking()) {
+                    logcat(LogPriority.WARN) {
+                        "TTS (WebView): Handoff timeout after 5000ms; resuming playback on new chapter"
+                    }
                     startTts()
                 }
             }
@@ -565,6 +583,8 @@ class NovelWebViewViewer(val activity: ReaderActivity) : Viewer {
                     // when the chapter URL is relative, making the URL useless as a guard.
                     if (isLoadingRealChapter) {
                         isLoadingRealChapter = false
+                        // Real content rendered; TTS may now read the body.
+                        webChapterContentReady = true
                         if (pendingTtsAutoStartOnLoad) {
                             pendingTtsAutoStartOnLoad = false
                             startTts()
@@ -1103,6 +1123,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) : Viewer {
         // Signal to onPageFinished that the next callback is for real chapter content, not
         // the loading-indicator page (which also fires onPageFinished with url="about:blank").
         isLoadingRealChapter = true
+        webChapterContentReady = false
         webView.loadDataWithBaseURL(resolveWebViewBaseUrl(chapterPath), html, "text/html", "UTF-8", null)
     }
 
@@ -1177,6 +1198,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) : Viewer {
         """.trimIndent()
 
         isLoadingRealChapter = false
+        webChapterContentReady = false
         webView.loadDataWithBaseURL(null, loadingHtml, "text/html", "UTF-8", null)
     }
 
@@ -1862,6 +1884,12 @@ class NovelWebViewViewer(val activity: ReaderActivity) : Viewer {
 
         ttsController.pendingStartRequest = null
         ttsController.isTtsAutoPlay = true
+        if (!webChapterContentReady) {
+            // Loading indicator still up; reading the body now would speak the placeholder
+            // and auto-advance. Defer; onPageFinished starts TTS once content is rendered.
+            pendingTtsAutoStartOnLoad = true
+            return
+        }
         val (chapterIdx, chapterId) = getTtsChapterContext()
         evaluateJavascriptSafe(
             """
@@ -1964,6 +1992,11 @@ class NovelWebViewViewer(val activity: ReaderActivity) : Viewer {
 
         ttsController.pendingStartRequest = null
         ttsController.isTtsAutoPlay = true
+        if (!webChapterContentReady) {
+            // Still loading; defer so onPageFinished re-runs the viewport start once content is in.
+            ttsController.pendingStartRequest = TtsController.StartRequest.VIEWPORT
+            return
+        }
         val (chapterIdx, chapterId) = getTtsChapterContext()
         evaluateJavascriptSafe(
             """
