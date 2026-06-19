@@ -24,6 +24,7 @@ import tachiyomi.domain.manga.repository.MangaRepository
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import androidx.core.net.toUri
 
 class LibraryExportJob(private val context: Context, workerParams: WorkerParameters) :
     CoroutineWorker(context, workerParams) {
@@ -55,17 +56,22 @@ class LibraryExportJob(private val context: Context, workerParams: WorkerParamet
 
         return try {
             val total = mangaRepository.getFavoritesCount().toInt()
+            var lastNotifyAt = 0L
             LibraryExporter.exportToCsv(
                 context = context,
-                uri = Uri.parse(uriString),
+                uri = uriString.toUri(),
                 total = total,
                 loadPage = { limit, offset -> mangaRepository.getFavoritesPaged(limit, offset) },
                 options = options,
                 onProgress = { progress ->
-                    notificationBuilder
-                        .setContentText("${progress.current}/${progress.total}")
-                        .setProgress(progress.total, progress.current, false)
-                    context.notify(Notifications.ID_LIBRARY_EXPORT_PROGRESS, notificationBuilder.build())
+                    val now = System.currentTimeMillis()
+                    if (now - lastNotifyAt >= PROGRESS_NOTIFY_INTERVAL_MS || progress.current >= progress.total) {
+                        lastNotifyAt = now
+                        notificationBuilder
+                            .setContentText("${progress.current}/${progress.total}")
+                            .setProgress(progress.total, progress.current, false)
+                        context.notify(Notifications.ID_LIBRARY_EXPORT_PROGRESS, notificationBuilder.build())
+                    }
                 },
                 onExportComplete = {
                     notificationBuilder
@@ -107,6 +113,7 @@ class LibraryExportJob(private val context: Context, workerParams: WorkerParamet
 
     companion object {
         private const val TAG = "LibraryExportJob"
+        private const val PROGRESS_NOTIFY_INTERVAL_MS = 500L
         private const val KEY_OUTPUT_URI = "output_uri"
         private const val KEY_INCLUDE_TITLE = "include_title"
         private const val KEY_INCLUDE_AUTHOR = "include_author"
