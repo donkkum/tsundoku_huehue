@@ -250,6 +250,7 @@ object SettingsAdvancedScreen : SearchableSettings {
         val context = LocalContext.current
         val navigator = LocalNavigator.currentOrThrow
         val scope = rememberCoroutineScope()
+        val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
         var showDeleteTranslationsDialog by remember { mutableStateOf(false) }
         var showNormalizeUrlsDialog by remember { mutableStateOf(false) }
         var showRemoveDuplicatesDialog by remember { mutableStateOf(false) }
@@ -1265,6 +1266,12 @@ object SettingsAdvancedScreen : SearchableSettings {
                             }
                         }
                     },
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = libraryPreferences.normalizeTagsOnUpdate,
+                    title = "Normalize tags when updating entry",
+                    subtitle = "Apply the same normalization automatically when entry details are " +
+                        "fetched/updated or tags are edited",
                 ),
                 Preference.PreferenceItem.TextPreference(
                     title = "Reset settings to default",

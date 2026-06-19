@@ -156,6 +156,11 @@ class LibraryPreferences(
     // Tag case sensitivity (default insensitive)
     val tagCaseSensitive: Preference<Boolean> = preferenceStore.getBoolean("pref_tag_case_sensitive", false)
 
+    // Normalize tags (trim, title-case, split on , / ;, dedupe case-insensitively) whenever an
+    // entry's details are inserted/updated or its tags are edited. Default off.
+    val normalizeTagsOnUpdate: Preference<Boolean> =
+        preferenceStore.getBoolean("pref_normalize_tags_on_update", false)
+
     // Manga detail page tag sorting (true = alphabetical, false = source order)
     val sortMangaTags: Preference<Boolean> = preferenceStore.getBoolean("pref_sort_manga_tags", false)
 

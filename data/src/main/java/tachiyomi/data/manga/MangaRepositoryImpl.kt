@@ -28,6 +28,9 @@ import app.cash.sqldelight.async.coroutines.awaitAsOneOrNull
 import tachiyomi.data.subscribeToList
 import tachiyomi.data.subscribeToOne
 import tachiyomi.data.subscribeToOneOrNull
+import tachiyomi.domain.library.service.LibraryPreferences
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 class MangaRepositoryImpl(
     private val database: Database,
@@ -1561,6 +1564,7 @@ class MangaRepositoryImpl(
     }
 
     override suspend fun insertNetworkManga(manga: List<Manga>): List<Manga> {
+        val normalizeTags = normalizeTagsOnUpdate
         return database.transactionWithResult {
             manga.map {
                 database.mangasQueries.insertNetworkManga(
@@ -1569,7 +1573,7 @@ class MangaRepositoryImpl(
                     artist = it.artist,
                     author = it.author,
                     description = it.description,
-                    genre = it.genre,
+                    genre = if (normalizeTags) it.genre?.let { g -> normalizeTagList(g) } else it.genre,
                     title = it.title,
                     alternativeTitles = it.alternativeTitles,
                     status = it.status,
@@ -1598,15 +1602,18 @@ class MangaRepositoryImpl(
     }
 
     private suspend fun partialUpdate(vararg mangaUpdates: MangaUpdate) {
+        // Read the pref once per batch, not per row.
+        val normalizeTags = normalizeTagsOnUpdate
         database.transaction {
             mangaUpdates.forEach { value ->
+                val genre = if (normalizeTags) value.genre?.let { normalizeTagList(it) } else value.genre
                 database.mangasQueries.update(
                     source = value.source,
                     url = value.url,
                     artist = value.artist,
                     author = value.author,
                     description = value.description,
-                    genre = value.genre?.let(StringListColumnAdapter::encode),
+                    genre = genre?.let(StringListColumnAdapter::encode),
                     title = value.title,
                     alternativeTitles = value.alternativeTitles?.let(StringListColumnAdapter::encode),
                     status = value.status,
@@ -1853,6 +1860,38 @@ class MangaRepositoryImpl(
         }
     }
 
+    /**
+     * Canonical tag normalization: split each entry on `,` / `;` (sources may merge tags), trim,
+     * title-case each word, drop blanks, dedupe case-insensitively keeping first occurrence. Shared
+     * by [normalizeAllTags] and the on-write normalization gated by
+     * [LibraryPreferences.normalizeTagsOnUpdate].
+     */
+    private fun normalizeTagList(genres: List<String>): List<String> {
+        val seen = HashSet<String>()
+        return genres
+            .flatMap { tag -> tag.split(",", ";").map { it.trim() } }
+            .map { tag ->
+                tag.trim()
+                    .split(" ")
+                    .joinToString(" ") { word ->
+                        word.lowercase().replaceFirstChar {
+                            if (it.isLowerCase()) it.titlecase() else it.toString()
+                        }
+                    }
+            }
+            .filter { it.isNotBlank() }
+            .filter { tag ->
+                val lowercased = tag.lowercase()
+                seen.add(lowercased)
+            }
+    }
+
+    private val normalizeTagsOnUpdatePref by lazy {
+        runCatching { Injekt.get<LibraryPreferences>().normalizeTagsOnUpdate }.getOrNull()
+    }
+    private val normalizeTagsOnUpdate: Boolean
+        get() = normalizeTagsOnUpdatePref?.get() ?: false
+
     override suspend fun normalizeAllTags(): Int {
         logcat(LogPriority.INFO) { "MangaRepositoryImpl.normalizeAllTags: Starting tag normalization" }
         return try {
@@ -1861,35 +1900,7 @@ class MangaRepositoryImpl(
             database.transaction {
                 favoriteGenres.forEach { (mangaId, genres) ->
                     if (!genres.isNullOrEmpty()) {
-                        // Flatten: re-split each tag on common separators that sources may use
-                        // (e.g. "Action,Adventure" or "Action; Adventure" stored as one tag)
-                        val flattened = genres.flatMap { tag ->
-                            tag.split(",", ";").map { it.trim() }
-                        }
-
-                        // Normalize: trim, title-case, remove duplicates (keeping first occurrence)
-                        val seen = mutableSetOf<String>()
-                        val normalized = flattened
-                            .map { tag ->
-                                // Trim whitespace and title-case each word
-                                tag.trim()
-                                    .split(" ")
-                                    .joinToString(" ") { word ->
-                                        word.lowercase().replaceFirstChar {
-                                            if (it.isLowerCase()) it.titlecase() else it.toString()
-                                        }
-                                    }
-                            }
-                            .filter { it.isNotBlank() }
-                            .filter { tag ->
-                                val lowercased = tag.lowercase()
-                                if (lowercased in seen) {
-                                    false
-                                } else {
-                                    seen.add(lowercased)
-                                    true
-                                }
-                            }
+                        val normalized = normalizeTagList(genres)
 
                         // Only update if there's a difference
                         if (normalized != genres) {
