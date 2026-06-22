@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:max-line-length")
+
 package eu.kanade.presentation.library
 
 import android.content.res.Configuration
@@ -671,49 +673,58 @@ private fun ColumnScope.TagsPage(
     // these prefs are shared across the manga/novel/all libraries, so a tag included on one type
     // would otherwise silently filter another to empty while nothing appears selected. They land in
     // the active partition below, pinned to the top.
-    val sortedTags = remember(tags, tagSortByName, tagSortAscending, committedTagQuery, includedTags, excludedTags, tagCaseSensitive) {
-        val loadedKeys = if (tagCaseSensitive) {
-            tags.mapTo(HashSet()) { it.first }
-        } else {
-            tags.mapTo(HashSet()) { it.first.lowercase() }
-        }
-        fun isLoaded(tag: String) =
-            if (tagCaseSensitive) tag in loadedKeys else tag.lowercase() in loadedKeys
-        val phantomActive = (includedTags + excludedTags)
-            .filterNot { isLoaded(it) }
-            .map { it to 0 }
-        val allTags = phantomActive + tags
-
-        val filtered = if (committedTagQuery.isBlank()) {
-            allTags
-        } else {
-            val query = if (tagCaseSensitive) committedTagQuery else committedTagQuery.lowercase()
-            allTags.filter { (tag, _) ->
-                val tagToMatch = if (tagCaseSensitive) tag else tag.lowercase()
-                tagToMatch.contains(query)
-            }
-        }
-
-        val (activeTags, inactiveTags) = filtered.partition { (tag, _) ->
-            tag in includedTags || tag in excludedTags
-        }
-
-        val sortComparator: Comparator<Pair<String, Int>> = if (tagSortByName) {
-            if (tagSortAscending) {
-                compareBy { it.first.lowercase() }
+    val sortedTags =
+        remember(
+            tags,
+            tagSortByName,
+            tagSortAscending,
+            committedTagQuery,
+            includedTags,
+            excludedTags,
+            tagCaseSensitive,
+        ) {
+            val loadedKeys = if (tagCaseSensitive) {
+                tags.mapTo(HashSet()) { it.first }
             } else {
-                compareByDescending { it.first.lowercase() }
+                tags.mapTo(HashSet()) { it.first.lowercase() }
             }
-        } else {
-            if (tagSortAscending) {
-                compareBy { it.second }
-            } else {
-                compareByDescending { it.second }
-            }
-        }
+            fun isLoaded(tag: String) =
+                if (tagCaseSensitive) tag in loadedKeys else tag.lowercase() in loadedKeys
+            val phantomActive = (includedTags + excludedTags)
+                .filterNot { isLoaded(it) }
+                .map { it to 0 }
+            val allTags = phantomActive + tags
 
-        activeTags.sortedWith(sortComparator) + inactiveTags.sortedWith(sortComparator)
-    }
+            val filtered = if (committedTagQuery.isBlank()) {
+                allTags
+            } else {
+                val query = if (tagCaseSensitive) committedTagQuery else committedTagQuery.lowercase()
+                allTags.filter { (tag, _) ->
+                    val tagToMatch = if (tagCaseSensitive) tag else tag.lowercase()
+                    tagToMatch.contains(query)
+                }
+            }
+
+            val (activeTags, inactiveTags) = filtered.partition { (tag, _) ->
+                tag in includedTags || tag in excludedTags
+            }
+
+            val sortComparator: Comparator<Pair<String, Int>> = if (tagSortByName) {
+                if (tagSortAscending) {
+                    compareBy { it.first.lowercase() }
+                } else {
+                    compareByDescending { it.first.lowercase() }
+                }
+            } else {
+                if (tagSortAscending) {
+                    compareBy { it.second }
+                } else {
+                    compareByDescending { it.second }
+                }
+            }
+
+            activeTags.sortedWith(sortComparator) + inactiveTags.sortedWith(sortComparator)
+        }
 
     if (sortedTags.isEmpty() && !isLoading) {
         Text(
