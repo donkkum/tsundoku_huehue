@@ -17,6 +17,7 @@ import eu.kanade.tachiyomi.util.system.AuthenticatorUtil.authenticate
 import mihon.domain.extension.interactor.GetExtensionStoreCountAsFlow
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.novel.TDMR
 import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
@@ -81,6 +82,13 @@ object SettingsBrowseScreen : SearchableSettings {
                         subtitle = pluralStringResource(MR.plurals.num_repos, reposCount.toInt(), reposCount),
                         onClick = {
                             navigator.push(ExtensionStoresScreen())
+                        },
+                    ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(TDMR.strings.pref_novel_extension_repos),
+                        subtitle = stringResource(TDMR.strings.pref_novel_extension_repos_summary),
+                        onClick = {
+                            navigator.push(NovelExtensionReposScreen())
                         },
                     ),
                 ),

@@ -762,6 +762,8 @@
     <string name="custom_sources_language_format">Language: %1$s</string>
     <string name="custom_sources_test">Test</string>
     <string name="custom_sources_export">Export</string>
+    <string name="pref_novel_extension_repos">Novel extension repos</string>
+    <string name="pref_novel_extension_repos_summary">Manage JS plugin and novel extension repositories</string>
     <string name="custom_sources_use_webview_selector">Use WebView Element Selector</string>
     <string name="custom_sources_use_webview_selector_summary">Guided setup to select elements visually</string>
     <string name="custom_sources_open_webview_wizard">Open WebView Setup</string>
