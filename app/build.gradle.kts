@@ -282,7 +282,7 @@ dependencies {
 
     // JavaScript engine (for JS plugins)
     // implementation(libs.bundles.js.engine)
-    implementation("io.github.dokar3:quickjs-kt:1.0.0-alpha13")
+    implementation("io.github.dokar3:quickjs-kt:1.0.5")
 
     // Disk
     implementation(libs.diskLruCache)
