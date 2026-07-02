@@ -2,12 +2,10 @@ package eu.kanade.tachiyomi.ui.reader
 
 import android.annotation.SuppressLint
 import android.app.assist.AssistContent
-import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.graphics.Color
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
@@ -42,7 +40,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import androidx.core.graphics.Insets
 import androidx.core.net.toUri
@@ -88,7 +85,6 @@ import eu.kanade.tachiyomi.ui.reader.ReaderViewModel.SetAsCoverResult.Success
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
-import eu.kanade.tachiyomi.ui.reader.service.TtsPlaybackService
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderOrientation
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
@@ -105,7 +101,6 @@ import eu.kanade.tachiyomi.util.system.toShareIntent
 import eu.kanade.tachiyomi.util.system.toast
 import eu.kanade.tachiyomi.util.view.setComposeContent
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -115,7 +110,6 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.sample
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import logcat.LogPriority
 import tachiyomi.core.common.Constants
@@ -165,20 +159,6 @@ class ReaderActivity : BaseActivity() {
     private val windowInsetsController by lazy { WindowInsetsControllerCompat(window, window.decorView) }
 
     private var loadingIndicator: ReaderProgressIndicator? = null
-    private var ttsNotificationSyncJob: Job? = null
-
-    private val ttsNotificationControlReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action != TtsPlaybackService.ACTION_CONTROL) return
-
-            when (intent.getStringExtra(TtsPlaybackService.EXTRA_COMMAND)) {
-                TtsPlaybackService.COMMAND_TOGGLE_PAUSE -> togglePauseResumeFromNotification()
-                TtsPlaybackService.COMMAND_PREV_PARAGRAPH -> stepTtsParagraph(isNext = false)
-                TtsPlaybackService.COMMAND_NEXT_PARAGRAPH -> stepTtsParagraph(isNext = true)
-                TtsPlaybackService.COMMAND_STOP -> stopTtsFromNotification()
-            }
-        }
-    }
 
     var isScrollingThroughPages = false
         private set
@@ -224,13 +204,6 @@ class ReaderActivity : BaseActivity() {
         binding = ReaderActivityBinding.inflate(layoutInflater)
         setContentView(binding.root)
         binding.setComposeOverlay()
-
-        ContextCompat.registerReceiver(
-            this,
-            ttsNotificationControlReceiver,
-            IntentFilter(TtsPlaybackService.ACTION_CONTROL),
-            ContextCompat.RECEIVER_NOT_EXPORTED,
-        )
 
         if (viewModel.needsInit()) {
             val manga = intent.extras?.getLong("manga", -1) ?: -1L
@@ -322,21 +295,6 @@ class ReaderActivity : BaseActivity() {
                 }
             }
             .launchIn(lifecycleScope)
-
-        readerPreferences.novelTtsBackgroundPlayback.changes()
-            .drop(1)
-            .onEach { enabled ->
-                if (enabled) {
-                    val state = currentNovelTtsState()
-                    if (state?.active == true) {
-                        startTtsNotificationSync()
-                        syncBackgroundTtsState()
-                    }
-                } else {
-                    stopBackgroundTtsIfRunning()
-                }
-            }
-            .launchIn(lifecycleScope)
     }
 
     private fun ReaderActivityBinding.setComposeOverlay(): Unit = composeOverlay.setComposeContent {
@@ -348,7 +306,6 @@ class ReaderActivity : BaseActivity() {
         val novelStatusBarShowBattery by readerPreferences.novelStatusBarShowBattery.collectAsState()
         val novelStatusBarShowChapter by readerPreferences.novelStatusBarShowChapter.collectAsState()
         val novelStatusBarShowProgress by readerPreferences.novelStatusBarShowProgress.collectAsState()
-        val novelTtsControlsActive by readerPreferences.novelTtsControlsVisible.collectAsState()
         val novelStatusBarChapterDisplay by readerPreferences.novelChapterTitleDisplay.collectAsState()
         val novelTheme by readerPreferences.novelTheme.collectAsState()
         val novelBgColorInt by readerPreferences.novelBackgroundColor.collectAsState()
@@ -400,7 +357,6 @@ class ReaderActivity : BaseActivity() {
                 }
                 val readerBgColor = ComposeColor(bgInt)
                 val readerTextColor = ComposeColor(textInt)
-                val extraPad = if (novelTtsControlsActive) 56.dp else 0.dp
                 NovelStatusBar(
                     chapterText = chapterText,
                     progressPercent = state.novelProgressPercent,
@@ -413,8 +369,7 @@ class ReaderActivity : BaseActivity() {
                     isCollapsed = statusBarCollapsed,
                     onToggleCollapse = { statusBarCollapsed = !statusBarCollapsed },
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = extraPad),
+                        .align(Alignment.BottomCenter),
                 )
             }
         }
@@ -552,9 +507,6 @@ class ReaderActivity : BaseActivity() {
      * Called when the activity is destroyed. Cleans up the viewer, configuration and any view.
      */
     override fun onDestroy() {
-        stopBackgroundTtsIfRunning()
-        ttsNotificationSyncJob?.cancel()
-        unregisterReceiver(ttsNotificationControlReceiver)
         super.onDestroy()
         viewModel.state.value.viewer?.destroy()
         config = null
@@ -565,11 +517,6 @@ class ReaderActivity : BaseActivity() {
     override fun onPause() {
         lifecycleScope.launchNonCancellable {
             viewModel.updateHistory()
-        }
-
-        if (!isChangingConfigurations && !readerPreferences.novelTtsBackgroundPlayback.get()) {
-            stopAnyActiveNovelTts()
-            stopBackgroundTtsIfRunning()
         }
 
         super.onPause()
@@ -583,12 +530,6 @@ class ReaderActivity : BaseActivity() {
         super.onResume()
         viewModel.restartReadTimer()
         setMenuVisibility(viewModel.state.value.menuVisible)
-        if (readerPreferences.novelTtsBackgroundPlayback.get() &&
-            currentNovelTtsState()?.active == true
-        ) {
-            startTtsNotificationSync()
-            syncBackgroundTtsState()
-        }
     }
 
     /**
@@ -724,26 +665,6 @@ class ReaderActivity : BaseActivity() {
             // Use state.novelProgressPercent for slider value, which is updated via onNovelProgressChanged callback
             val novelProgressFromState = state.novelProgressPercent
 
-            var isTtsActive by remember { mutableStateOf(false) }
-            var isTtsPaused by remember { mutableStateOf(false) }
-            var ttsControlsVisible by remember { mutableStateOf(readerPreferences.novelTtsControlsVisible.get()) }
-            // Re-sync the pause/play button on menu open and chapter change. Chapter nav
-            // stops TTS without a button tap, so key on chapter id to reset it.
-            LaunchedEffect(state.menuVisible, state.novelVisibleChapter?.id) {
-                if (!state.menuVisible) return@LaunchedEffect
-                val viewer = state.viewer
-                isTtsActive = when (viewer) {
-                    is NovelViewer -> viewer.isTtsActive()
-                    is NovelWebViewViewer -> viewer.isTtsActive()
-                    else -> false
-                }
-                isTtsPaused = when (viewer) {
-                    is NovelViewer -> viewer.isTtsPaused()
-                    is NovelWebViewViewer -> viewer.isTtsPaused()
-                    else -> false
-                }
-            }
-
             // Also sync from viewer when menu becomes visible (for initial sync)
             LaunchedEffect(state.menuVisible) {
                 if (state.menuVisible) {
@@ -872,139 +793,6 @@ class ReaderActivity : BaseActivity() {
                 onToggleTranslation = viewModel::toggleTranslation,
                 onLongPressTranslation = viewModel::openTranslationLanguageDialog,
                 onRetranslate = if (state.isTranslating) viewModel::retranslateCurrentChapter else null,
-                isTtsActive = isTtsActive,
-                isTtsPaused = isTtsPaused,
-                ttsControlsVisible = ttsControlsVisible,
-                onToggleTtsControls = {
-                    val nowVisible = !ttsControlsVisible
-                    ttsControlsVisible = nowVisible
-                    readerPreferences.novelTtsControlsVisible.set(nowVisible)
-                    val viewer = state.viewer
-                    if (nowVisible) {
-                        if (!isTtsActive && readerPreferences.novelTtsAutoStartOnPanelOpen.get()) {
-                            when (viewer) {
-                                is NovelViewer -> {
-                                    startBackgroundTtsIfEnabled()
-                                    viewer.startTts()
-                                    isTtsActive = true
-                                    isTtsPaused = false
-                                    syncBackgroundTtsState()
-                                }
-                                is NovelWebViewViewer -> {
-                                    startBackgroundTtsIfEnabled()
-                                    viewer.startTts()
-                                    isTtsActive = true
-                                    isTtsPaused = false
-                                    syncBackgroundTtsState()
-                                }
-                                else -> {}
-                            }
-                        }
-                    } else {
-                        when (viewer) {
-                            is NovelViewer -> {
-                                stopBackgroundTtsIfRunning()
-                                viewer.stopTts()
-                                isTtsActive = false
-                                isTtsPaused = false
-                                stopTtsNotificationSync()
-                            }
-                            is NovelWebViewViewer -> {
-                                stopBackgroundTtsIfRunning()
-                                viewer.stopTts()
-                                isTtsActive = false
-                                isTtsPaused = false
-                                stopTtsNotificationSync()
-                            }
-                            else -> {}
-                        }
-                    }
-                },
-                onToggleTts = {
-                    val viewer = state.viewer
-                    when (viewer) {
-                        is NovelViewer -> {
-                            if (viewer.isTtsSpeaking()) {
-                                viewer.pauseTts()
-                                isTtsPaused = true
-                                syncBackgroundTtsState()
-                            } else if (viewer.isTtsPaused()) {
-                                viewer.resumeTts()
-                                isTtsPaused = false
-                                startBackgroundTtsIfEnabled()
-                                syncBackgroundTtsState()
-                            } else {
-                                startBackgroundTtsIfEnabled()
-                                viewer.startTts()
-                                isTtsActive = true
-                                isTtsPaused = false
-                                syncBackgroundTtsState()
-                            }
-                        }
-                        is NovelWebViewViewer -> {
-                            if (viewer.isTtsSpeaking()) {
-                                viewer.pauseTts()
-                                isTtsPaused = true
-                                syncBackgroundTtsState()
-                            } else if (viewer.isTtsPaused()) {
-                                viewer.resumeTts()
-                                isTtsPaused = false
-                                startBackgroundTtsIfEnabled()
-                                syncBackgroundTtsState()
-                            } else {
-                                startBackgroundTtsIfEnabled()
-                                viewer.startTts()
-                                isTtsActive = true
-                                isTtsPaused = false
-                                syncBackgroundTtsState()
-                            }
-                        }
-                        else -> {}
-                    }
-                },
-                onLongPressTts = {
-                    // Force stop without hiding panel
-                    val viewer = state.viewer
-                    when (viewer) {
-                        is NovelViewer -> {
-                            stopBackgroundTtsIfRunning()
-                            viewer.stopTts()
-                            isTtsActive = false
-                            isTtsPaused = false
-                            stopTtsNotificationSync()
-                        }
-                        is NovelWebViewViewer -> {
-                            stopBackgroundTtsIfRunning()
-                            viewer.stopTts()
-                            isTtsActive = false
-                            isTtsPaused = false
-                            stopTtsNotificationSync()
-                        }
-                        else -> {}
-                    }
-                },
-                onTtsStartFromViewport = {
-                    val viewer = state.viewer
-                    when (viewer) {
-                        is NovelViewer -> {
-                            startBackgroundTtsIfEnabled()
-                            viewer.startTtsFromViewport()
-                            isTtsActive = true
-                            isTtsPaused = false
-                            syncBackgroundTtsState()
-                        }
-                        is NovelWebViewViewer -> {
-                            startBackgroundTtsIfEnabled()
-                            viewer.startTtsFromViewport()
-                            isTtsActive = true
-                            isTtsPaused = false
-                            syncBackgroundTtsState()
-                        }
-                        else -> {}
-                    }
-                },
-                onTtsPreviousParagraph = { stepTtsParagraph(isNext = false) },
-                onTtsNextParagraph = { stepTtsParagraph(isNext = true) },
 
                 isEditing = isEditing,
                 onToggleEdit = {
@@ -1076,13 +864,8 @@ class ReaderActivity : BaseActivity() {
             }
 
             if (showBottomBarEditor) {
-                val legacyTtsItems = setOf(
-                    BottomBarItem.TTS_PREV_PARAGRAPH,
-                    BottomBarItem.TTS_NEXT_PARAGRAPH,
-                    BottomBarItem.TTS_VIEWPORT,
-                )
                 BottomBarEditorSheet(
-                    items = bottomBarItems.filter { it.item !in legacyTtsItems },
+                    items = bottomBarItems,
                     onItemsChange = { viewModel.saveBottomBarItems(it) },
                     onDismiss = { showBottomBarEditor = false },
                     itemInfo = { item ->
@@ -1092,8 +875,6 @@ class ReaderActivity : BaseActivity() {
                                 viewModel.getMangaOrientation(resolveDefault = false),
                             ),
                             isAutoScrolling = isAutoScrolling,
-                            isTtsActive = isTtsActive,
-                            isTtsPaused = isTtsPaused,
                         )
                     },
                 )
@@ -1172,152 +953,6 @@ class ReaderActivity : BaseActivity() {
         } else if (readerPreferences.fullscreen.get()) {
             windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
         }
-    }
-
-    private fun startBackgroundTtsIfEnabled() {
-        if (readerPreferences.novelTtsBackgroundPlayback.get()) {
-            // No placeholder notification: the caller's syncBackgroundTtsState() starts
-            // the service with the real novel/chapter title.
-            startTtsNotificationSync()
-        }
-    }
-
-    private fun stopBackgroundTtsIfRunning() {
-        TtsPlaybackService.stop(this)
-        stopTtsNotificationSync()
-    }
-
-    private fun syncBackgroundTtsState() {
-        if (!readerPreferences.novelTtsBackgroundPlayback.get()) {
-            stopBackgroundTtsIfRunning()
-            return
-        }
-
-        val state = currentNovelTtsState() ?: return
-        if (!state.active) {
-            TtsPlaybackService.stop(this)
-            stopTtsNotificationSync()
-            return
-        }
-
-        TtsPlaybackService.syncState(
-            context = this,
-            isPaused = state.paused,
-            progressPercent = state.progressPercent,
-            novelTitle = state.novelTitle,
-            chapterTitle = state.chapterTitle,
-            mangaId = state.mangaId,
-            chapterId = state.chapterId,
-        )
-    }
-
-    private fun startTtsNotificationSync() {
-        ttsNotificationSyncJob?.cancel()
-        ttsNotificationSyncJob = lifecycleScope.launch {
-            // First pass runs before the caller sets TTS state. Don't stop the service
-            // until TTS has been active once: stopping it before startForeground() crashes
-            // with ForegroundServiceDidNotStartInTimeException.
-            var ttsWasActive = false
-            while (isActive) {
-                if (currentNovelTtsState()?.active == true) ttsWasActive = true
-                if (ttsWasActive) syncBackgroundTtsState()
-                delay(750)
-            }
-        }
-    }
-
-    private fun stopTtsNotificationSync() {
-        ttsNotificationSyncJob?.cancel()
-        ttsNotificationSyncJob = null
-    }
-
-    private data class NovelTtsState(
-        val active: Boolean,
-        val paused: Boolean,
-        val progressPercent: Int,
-        val novelTitle: String,
-        val chapterTitle: String,
-        val mangaId: Long,
-        val chapterId: Long,
-    )
-
-    private fun currentNovelTtsState(): NovelTtsState? {
-        val readerState = viewModel.state.value
-        val novelTitle = readerState.manga?.title.orEmpty().ifBlank { "TTS playback" }
-        val chapterTitle = readerState.novelVisibleChapter?.name ?: readerState.currentChapter?.chapter?.name.orEmpty()
-        val mangaId = readerState.manga?.id ?: -1L
-        val chapterId = readerState.currentChapter?.chapter?.id ?: -1L
-
-        return when (val viewer = viewModel.state.value.viewer) {
-            is NovelViewer -> NovelTtsState(
-                // Use isTtsActive() (covers the autoPlay flag) so the brief
-                // gap inside stepParagraph (stop → speakChunksFrom) doesn't
-                // make the periodic sync drop the foreground service.
-                active = viewer.isTtsActive(),
-                paused = viewer.isTtsPaused(),
-                progressPercent = viewer.getTtsProgressPercent(),
-                novelTitle = novelTitle,
-                chapterTitle = chapterTitle,
-                mangaId = mangaId,
-                chapterId = chapterId,
-            )
-            is NovelWebViewViewer -> NovelTtsState(
-                active = viewer.isTtsActive(),
-                paused = viewer.isTtsPaused(),
-                progressPercent = viewer.getTtsProgressPercent(),
-                novelTitle = novelTitle,
-                chapterTitle = chapterTitle,
-                mangaId = mangaId,
-                chapterId = chapterId,
-            )
-            else -> null
-        }
-    }
-
-    private fun stopAnyActiveNovelTts() {
-        when (val viewer = viewModel.state.value.viewer) {
-            is NovelViewer -> if (viewer.isTtsSpeaking() || viewer.isTtsPaused()) viewer.stopTts()
-            is NovelWebViewViewer -> if (viewer.isTtsSpeaking() || viewer.isTtsPaused()) viewer.stopTts()
-            else -> Unit
-        }
-    }
-
-    private fun togglePauseResumeFromNotification() {
-        when (val viewer = viewModel.state.value.viewer) {
-            is NovelViewer -> {
-                if (viewer.isTtsSpeaking()) {
-                    viewer.pauseTts()
-                } else if (viewer.isTtsPaused()) {
-                    viewer.resumeTts()
-                }
-            }
-            is NovelWebViewViewer -> {
-                if (viewer.isTtsSpeaking()) {
-                    viewer.pauseTts()
-                } else if (viewer.isTtsPaused()) {
-                    viewer.resumeTts()
-                }
-            }
-            else -> Unit
-        }
-        syncBackgroundTtsState()
-    }
-
-    private fun stepTtsParagraph(isNext: Boolean) {
-        val step: (() -> Unit)? = when (val viewer = viewModel.state.value.viewer) {
-            is NovelViewer -> if (isNext) viewer::ttsNextParagraph else viewer::ttsPreviousParagraph
-            is NovelWebViewViewer -> if (isNext) viewer::ttsNextParagraph else viewer::ttsPreviousParagraph
-            else -> null
-        }
-        step ?: return
-        startBackgroundTtsIfEnabled()
-        step()
-        syncBackgroundTtsState()
-    }
-
-    private fun stopTtsFromNotification() {
-        stopAnyActiveNovelTts()
-        stopBackgroundTtsIfRunning()
     }
 
     /**
@@ -1454,16 +1089,6 @@ class ReaderActivity : BaseActivity() {
      * should be automatically shown.
      */
     internal fun loadNextChapter() {
-        stopNovelTtsForManualNav()
-        loadNextChapterInternal()
-    }
-
-    /**
-     * Loads the next chapter for a TTS auto-advance without stopping TTS. The viewer
-     * has set pendingTtsAutoStart and needs it to survive the chapter swap so playback
-     * resumes; [loadNextChapter] would clear it via [stopNovelTtsForManualNav].
-     */
-    internal fun loadNextChapterForTtsHandoff() {
         loadNextChapterInternal()
     }
 
@@ -1485,7 +1110,6 @@ class ReaderActivity : BaseActivity() {
      * should be automatically shown.
      */
     internal fun loadPreviousChapter() {
-        stopNovelTtsForManualNav()
         lifecycleScope.launch {
             viewModel.loadPreviousChapter()
             // Only reset to page 0 if NOT using infinite scroll for novel viewers
@@ -1495,20 +1119,6 @@ class ReaderActivity : BaseActivity() {
             if (!(isNovelViewer && infiniteScrollEnabled)) {
                 moveToPageIndex(0)
             }
-        }
-    }
-
-    /**
-     * Stops any in-flight TTS session before a user-driven prev/next chapter
-     * navigation. TTS-internal handoffs (auto-advance) go through
-     * `loadNextChapterForTts` instead of this code path, so it's safe to
-     * unconditionally cut TTS here without disturbing automatic advancement.
-     */
-    private fun stopNovelTtsForManualNav() {
-        when (val viewer = viewModel.state.value.viewer) {
-            is NovelViewer -> viewer.stopTts()
-            is NovelWebViewViewer -> viewer.stopTts()
-            else -> {}
         }
     }
 

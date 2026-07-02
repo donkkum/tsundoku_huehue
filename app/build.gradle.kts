@@ -342,8 +342,6 @@ dependencies {
 
     testImplementation(libs.kotlinx.coroutines.test)
 
-    // media for tts notification
-    implementation(libs.androidx.media)
 }
 
 androidComponents {

@@ -13,7 +13,6 @@ internal class NovelWebViewPreferenceObserver(
     private val onScriptChanged: () -> Unit,
     private val onChapterReloadRequested: () -> Unit,
     private val onBlockMediaChanged: (Boolean) -> Unit,
-    private val onTtsSettingsChanged: () -> Unit,
 ) {
 
     fun observe() {
@@ -63,18 +62,5 @@ internal class NovelWebViewPreferenceObserver(
                 .collect { blockMedia -> onBlockMediaChanged(blockMedia) }
         }
 
-        scope.launch {
-            merge(
-                preferences.novelTtsVoice.changes(),
-                preferences.novelTtsSpeed.changes(),
-                preferences.novelTtsPitch.changes(),
-            )
-                .drop(TTS_PREF_COUNT)
-                .collect { onTtsSettingsChanged() }
-        }
-    }
-
-    companion object {
-        private const val TTS_PREF_COUNT = 3
     }
 }

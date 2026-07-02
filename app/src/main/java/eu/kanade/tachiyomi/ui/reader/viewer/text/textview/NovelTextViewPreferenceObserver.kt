@@ -12,7 +12,6 @@ internal class NovelTextViewPreferenceObserver(
     private val scope: CoroutineScope,
     private val onStylePrefChanged: () -> Unit,
     private val onContentReloadRequested: () -> Unit,
-    private val onTtsSettingsChanged: () -> Unit,
     private val onInfiniteScrollChanged: (Boolean) -> Unit,
 ) {
 
@@ -59,16 +58,6 @@ internal class NovelTextViewPreferenceObserver(
         }
 
         scope.launch {
-            merge(
-                preferences.novelTtsVoice.changes(),
-                preferences.novelTtsSpeed.changes(),
-                preferences.novelTtsPitch.changes(),
-            )
-                .drop(TTS_PREF_COUNT)
-                .collectLatest { onTtsSettingsChanged() }
-        }
-
-        scope.launch {
             preferences.novelInfiniteScroll.changes()
                 .drop(1)
                 .collectLatest { infiniteEnabled -> onInfiniteScrollChanged(infiniteEnabled) }
@@ -86,6 +75,5 @@ internal class NovelTextViewPreferenceObserver(
         private const val STYLE_PREF_COUNT = 11
         private const val CONTENT_PREF_COUNT = 7
         private const val LOWERCASE_AND_TITLE_PREF_COUNT = 2
-        private const val TTS_PREF_COUNT = 3
     }
 }

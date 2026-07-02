@@ -347,44 +347,6 @@ class ReaderPreferences(
     // Show raw HTML (display HTML tags without parsing) - useful for debugging
     val novelShowRawHtml: Preference<Boolean> = preferenceStore.getBoolean("pref_novel_show_raw_html", false)
 
-    // TTS (Text-to-Speech) preferences
-    val novelTtsSpeed: Preference<Float> = preferenceStore.getFloat("pref_novel_tts_speed", 1.0f)
-    val novelTtsPitch: Preference<Float> = preferenceStore.getFloat("pref_novel_tts_pitch", 1.0f)
-    val novelTtsVoice: Preference<String> = preferenceStore.getString("pref_novel_tts_voice", "")
-    val novelTtsAutoNextChapter: Preference<Boolean> = preferenceStore.getBoolean("pref_novel_tts_auto_next", true)
-    val novelTtsHighlightStyle: Preference<String> = preferenceStore.getString(
-        "pref_novel_tts_highlight_style",
-        "background",
-    ) // background, underline, outline
-    val novelTtsHighlightColor: Preference<Int> = preferenceStore.getInt(
-        "pref_novel_tts_highlight_color",
-        0xFFFFD54F.toInt(),
-    )
-    val novelTtsHighlightTextColor: Preference<Int> = preferenceStore.getInt(
-        "pref_novel_tts_highlight_text_color",
-        0xFF1A1A1A.toInt(),
-    )
-    val novelTtsEnableHighlight: Preference<Boolean> = preferenceStore.getBoolean(
-        "pref_novel_tts_enable_highlight",
-        true,
-    )
-    val novelTtsKeepHighlightInView: Preference<Boolean> = preferenceStore.getBoolean(
-        "pref_novel_tts_keep_highlight_in_view",
-        true,
-    )
-    val novelTtsBackgroundPlayback: Preference<Boolean> = preferenceStore.getBoolean(
-        "pref_novel_tts_background_playback",
-        false,
-    )
-    val novelTtsControlsVisible: Preference<Boolean> = preferenceStore.getBoolean(
-        "pref_novel_tts_controls_visible",
-        false,
-    )
-    val novelTtsAutoStartOnPanelOpen: Preference<Boolean> = preferenceStore.getBoolean(
-        "pref_novel_tts_auto_start_on_panel_open",
-        false,
-    )
-
     val novelBottomBarItems: Preference<String> = preferenceStore.getString(
         "novel_bottom_bar_items",
         DefaultBottomBarItems.serialize(),
