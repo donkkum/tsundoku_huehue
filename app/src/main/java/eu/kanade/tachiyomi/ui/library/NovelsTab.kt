@@ -171,6 +171,7 @@ data object NovelsTab : Tab {
                     scrollBehavior = scrollBehavior.takeIf { !state.showCategoryTabs },
                     onClickMassImport = screenModel::openMassImportDialog,
                     onClickImportEpub = { navigator.push(ImportEpubScreen()) },
+                    onClickRestoreDownloads = { navigator.push(RestoreDownloadsScreen()) },
                     onClickFindDuplicates = { navigator.push(DuplicateDetectionScreen()) },
                     onClickCategoryActions = {
                         state.activeCategory?.let(screenModel::openCategoryActionsDialog)

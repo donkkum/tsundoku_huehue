@@ -45,6 +45,7 @@ fun LibraryToolbar(
     scrollBehavior: TopAppBarScrollBehavior?,
     onClickMassImport: (() -> Unit)? = null,
     onClickImportEpub: (() -> Unit)? = null,
+    onClickRestoreDownloads: (() -> Unit)? = null,
     onClickFindDuplicates: (() -> Unit)? = null,
     onClickCategoryActions: (() -> Unit)? = null,
 ) = when {
@@ -68,6 +69,7 @@ fun LibraryToolbar(
         scrollBehavior = scrollBehavior,
         onClickMassImport = onClickMassImport,
         onClickImportEpub = onClickImportEpub,
+        onClickRestoreDownloads = onClickRestoreDownloads,
         onClickFindDuplicates = onClickFindDuplicates,
         onClickCategoryActions = onClickCategoryActions,
     )
@@ -88,6 +90,7 @@ private fun LibraryRegularToolbar(
     scrollBehavior: TopAppBarScrollBehavior?,
     onClickMassImport: (() -> Unit)? = null,
     onClickImportEpub: (() -> Unit)? = null,
+    onClickRestoreDownloads: (() -> Unit)? = null,
     onClickFindDuplicates: (() -> Unit)? = null,
     onClickCategoryActions: (() -> Unit)? = null,
 ) {
@@ -151,6 +154,15 @@ private fun LibraryRegularToolbar(
                     AppBar.OverflowAction(
                         title = "Import local files",
                         onClick = onClickImportEpub,
+                    ),
+                )
+            }
+
+            if (onClickRestoreDownloads != null) {
+                actions.add(
+                    AppBar.OverflowAction(
+                        title = "Restore from downloads folder",
+                        onClick = onClickRestoreDownloads,
                     ),
                 )
             }
