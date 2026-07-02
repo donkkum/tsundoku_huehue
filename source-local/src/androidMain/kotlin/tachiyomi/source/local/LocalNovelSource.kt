@@ -559,7 +559,9 @@ actual class LocalNovelSource : CatalogueSource, UnmeteredSource {
                 return buildString {
                     append("<html><body style='margin:0;padding:8px;background:#1a1a1a'>")
                     for (i in 0 until pageCount) {
-                        append("<img src='pdf_page_$i.jpg' style='width:100%;display:block;margin-bottom:8px'>")
+                        // Use the tsundoku-novel-image:// scheme so NovelWebViewImageCache
+                        // intercepts the request and routes it through getPageDataStream().
+                        append("<img src='tsundoku-novel-image://pdf_page_$i.jpg' style='width:100%;display:block;margin-bottom:8px'>")
                     }
                     if (renderer.pageCount > MAX_PDF_PAGES) {
                         append("<p style='color:#aaa;text-align:center;padding:16px'>")
