@@ -149,7 +149,7 @@ private fun LibraryRegularToolbar(
             if (onClickImportEpub != null) {
                 actions.add(
                     AppBar.OverflowAction(
-                        title = "Import EPUB",
+                        title = "Import local files",
                         onClick = onClickImportEpub,
                     ),
                 )
