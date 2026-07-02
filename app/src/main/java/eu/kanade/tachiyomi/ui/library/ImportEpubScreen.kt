@@ -644,17 +644,11 @@ class ImportEpubScreen(
                         onCategoryMenuExpandedChange = { categoryMenuExpanded = it },
                         onCategorySelected = { selectedCategoryId = it },
                         onPickFiles = {
-                            filePickerLauncher.launch(
-                                arrayOf(
-                                    "application/epub+zip",
-                                    "text/plain",
-                                    "application/pdf",
-                                    "application/x-mobipocket-ebook",
-                                    "application/vnd.amazon.ebook",
-                                    // Some file managers use a wildcard for mobi/azw
-                                    "application/octet-stream",
-                                ),
-                            )
+                            // Use */* so all file managers show every file type.
+                            // Android 10 devices silently drop EXTRA_MIME_TYPES when
+                            // the file manager doesn't support it, hiding pdf/mobi/txt.
+                            // Unsupported formats are caught and reported in parseAndIngest.
+                            filePickerLauncher.launch(arrayOf("*/*"))
                         },
                         onPickFolder = {
                             folderPickerLauncher.launch(null)

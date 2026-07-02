@@ -61,8 +61,14 @@ class ParseEpubPreview {
                         val inputStream = context.contentResolver.openInputStream(uri) ?: return@runCatching null
                         val fileName = getFileNameFromUri(context, uri) ?: "unknown.epub"
 
-                        if (!fileName.endsWith(".epub", ignoreCase = true)) {
-                            // Non-EPUB: return basic metadata from the filename; no parsing needed
+                        val ext = fileName.substringAfterLast('.', "").lowercase()
+                        if (ext !in SUPPORTED_IMPORT_EXTENSIONS) {
+                            errors += "Skipped unsupported file: $fileName"
+                            inputStream.close()
+                            return@runCatching null
+                        }
+                        if (ext != "epub") {
+                            // txt / mobi / pdf — return filename-based metadata; no deep parse needed
                             inputStream.close()
                             return@runCatching PreviewFile(
                                 uri = uri,
@@ -131,6 +137,8 @@ class ParseEpubPreview {
     companion object {
         /** Max simultaneous EPUB parses — each holds a temp file + ZIP handle in memory. */
         private const val PARSE_CONCURRENCY = 4
+
+        val SUPPORTED_IMPORT_EXTENSIONS = setOf("epub", "txt", "text", "mobi", "pdf")
     }
 
     fun defaultCustomTitle(files: List<PreviewFile>): String {
