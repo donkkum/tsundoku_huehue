@@ -548,6 +548,7 @@ actual class LocalNovelSource : CatalogueSource, UnmeteredSource {
                             val w = (page.width * scale).toInt().coerceAtLeast(1)
                             val h = (page.height * scale).toInt().coerceAtLeast(1)
                             val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                            android.graphics.Canvas(bitmap).drawColor(android.graphics.Color.WHITE)
                             page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                             dest.outputStream().use { out ->
                                 bitmap.compress(Bitmap.CompressFormat.JPEG, PDF_JPEG_QUALITY, out)
@@ -578,7 +579,8 @@ actual class LocalNovelSource : CatalogueSource, UnmeteredSource {
     /** Returns a stable cache file path for a single rendered PDF page. */
     private fun pdfPageCacheFile(context: Context, chapterUrl: String, pageIndex: Int): java.io.File {
         val key = chapterUrl.hashCode().toUInt().toString(16)
-        val dir = java.io.File(context.cacheDir, "pdf_pages/$key").also { it.mkdirs() }
+        // v2 subdir invalidates any black-background pages cached by the previous renderer
+        val dir = java.io.File(context.cacheDir, "pdf_pages/v2/$key").also { it.mkdirs() }
         return java.io.File(dir, "pdf_page_$pageIndex.jpg")
     }
 
