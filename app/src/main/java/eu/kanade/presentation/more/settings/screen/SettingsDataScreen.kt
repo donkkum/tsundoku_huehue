@@ -51,6 +51,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import com.hippo.unifile.UniFile
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.screen.data.CreateBackupScreen
+import eu.kanade.tachiyomi.ui.library.RestoreDownloadsScreen
 import eu.kanade.presentation.more.settings.screen.data.RestoreBackupScreen
 import eu.kanade.presentation.more.settings.screen.data.StorageInfo
 import eu.kanade.presentation.more.settings.widget.BasePreferenceWidget
@@ -354,6 +355,12 @@ object SettingsDataScreen : SearchableSettings {
                     onClick = {
                         chooseLNReaderBackup.launch("application/zip")
                     },
+                ),
+
+                Preference.PreferenceItem.TextPreference(
+                    title = "Restore from downloads folder",
+                    subtitle = "Rebuild your library from previously downloaded HTML chapters — no internet needed",
+                    onClick = { navigator.push(RestoreDownloadsScreen()) },
                 ),
 
                 // Automatic backups
