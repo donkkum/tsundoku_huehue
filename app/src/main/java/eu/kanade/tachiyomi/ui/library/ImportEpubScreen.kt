@@ -99,6 +99,12 @@ import java.util.UUID
 private const val TOC_PREVIEW_SECTION_SIZE = 3
 private const val TOC_PREVIEW_ALL_THRESHOLD = TOC_PREVIEW_SECTION_SIZE * 3
 
+/** Above this count, skip the per-file preview and offer a direct batch import. */
+private const val BATCH_IMPORT_THRESHOLD = 50
+
+/** How many EPUBs to parse + import per chunk in batch mode (keeps peak memory bounded). */
+private const val BATCH_CHUNK_SIZE = 20
+
 /**
  * EPUB import screen.
  *
@@ -139,6 +145,10 @@ class ImportEpubScreen(
         var importResult by remember { mutableStateOf<ImportResult?>(null) }
         var successfullyImportedUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
         var showDeleteImportedConfirm by remember { mutableStateOf(false) }
+
+        // Batch import: when a folder scan returns more than BATCH_IMPORT_THRESHOLD files,
+        // we skip the per-file preview and just confirm → import directly.
+        var pendingBatchUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
 
         fun exitImportScreen() {
             if (closeActivityOnDone) {
@@ -242,11 +252,11 @@ class ImportEpubScreen(
                     collectEpubsFromFolder(context, treeUri)
                 }
                 isParsing = false
-                if (epubUris.isEmpty()) {
-                    snackbarHostState.showSnackbar("No EPUB files found in the selected folder")
-                    return@launch
+                when {
+                    epubUris.isEmpty() -> snackbarHostState.showSnackbar("No EPUB files found in the selected folder")
+                    epubUris.size > BATCH_IMPORT_THRESHOLD -> pendingBatchUris = epubUris
+                    else -> parseAndIngest(epubUris)
                 }
-                parseAndIngest(epubUris)
             }
         }
 
@@ -345,6 +355,155 @@ class ImportEpubScreen(
             if (group.volumes.isEmpty()) {
                 volumeGroups.removeAt(groupIndex)
             }
+        }
+
+        // Batch import confirmation dialog — shown instead of the full preview for large folders.
+        if (pendingBatchUris.isNotEmpty() && importProgress == null && importResult == null) {
+            AlertDialog(
+                onDismissRequest = { pendingBatchUris = emptyList() },
+                title = { Text("Import ${pendingBatchUris.size} EPUBs?") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Found ${pendingBatchUris.size} EPUB files. Each will be imported as its own novel using metadata from the file.")
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { autoAddToLibrary = !autoAddToLibrary },
+                        ) {
+                            Checkbox(checked = autoAddToLibrary, onCheckedChange = { autoAddToLibrary = it })
+                            Text(stringResource(TDMR.strings.epub_auto_add_to_category))
+                        }
+                        if (autoAddToLibrary && categories.isNotEmpty()) {
+                            val selectedCategory = categories.firstOrNull { it.id == selectedCategoryId }
+                            Box {
+                                OutlinedButton(
+                                    onClick = { categoryMenuExpanded = true },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        text = selectedCategory?.visualName ?: stringResource(TDMR.strings.epub_select_category),
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Icon(Icons.Outlined.ArrowDropDown, contentDescription = null)
+                                }
+                                DropdownMenu(
+                                    expanded = categoryMenuExpanded,
+                                    onDismissRequest = { categoryMenuExpanded = false },
+                                ) {
+                                    categories.forEach { category ->
+                                        DropdownMenuItem(
+                                            text = { Text(category.visualName) },
+                                            onClick = {
+                                                selectedCategoryId = category.id
+                                                categoryMenuExpanded = false
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val urisToImport = pendingBatchUris
+                            pendingBatchUris = emptyList()
+                            scope.launch {
+                                val totalUnits = urisToImport.size
+                                var completedUnits = 0
+                                var successCount = 0
+                                val errors = mutableListOf<String>()
+                                val importedUris = mutableListOf<Uri>()
+
+                                importProgress = ImportProgress(
+                                    current = 0,
+                                    total = totalUnits,
+                                    currentFileName = "",
+                                    isRunning = true,
+                                )
+
+                                // Parse and import in chunks to avoid holding all metadata in memory.
+                                urisToImport.chunked(BATCH_CHUNK_SIZE).forEach { chunk ->
+                                    persistImportUriPermissions(context, chunk)
+                                    val parsed = withContext(Dispatchers.IO) {
+                                        parseEpubPreview.parseSelected(context, chunk)
+                                    }
+
+                                    parsed.files.forEach { previewFile ->
+                                        val importFile = ImportEpub.ImportFile(
+                                            uri = previewFile.uri,
+                                            fileName = previewFile.fileName,
+                                            title = previewFile.title,
+                                            author = previewFile.author,
+                                            description = previewFile.description,
+                                            coverUri = previewFile.coverUri,
+                                            genres = previewFile.genres,
+                                        )
+                                        try {
+                                            val result = importEpub.execute(
+                                                context = context,
+                                                files = listOf(importFile),
+                                                customTitle = null,
+                                                combineAsOne = false,
+                                                autoAddToLibrary = autoAddToLibrary,
+                                                categoryId = if (autoAddToLibrary) selectedCategoryId else null,
+                                                forceUniqueFolderName = true,
+                                                onProgress = { _, _, fileName ->
+                                                    importProgress = ImportProgress(
+                                                        current = (completedUnits + 1).coerceAtMost(totalUnits),
+                                                        total = totalUnits,
+                                                        currentFileName = fileName.ifBlank { previewFile.fileName },
+                                                        isRunning = true,
+                                                    )
+                                                },
+                                            )
+                                            successCount += result.successCount
+                                            errors += result.errors
+                                            importedUris += result.importedUris
+                                        } catch (e: Exception) {
+                                            errors += "${previewFile.fileName}: ${e.message.orEmpty()}"
+                                        }
+                                        completedUnits++
+                                        importProgress = ImportProgress(
+                                            current = completedUnits.coerceAtMost(totalUnits),
+                                            total = totalUnits,
+                                            currentFileName = previewFile.fileName,
+                                            isRunning = true,
+                                        )
+                                    }
+                                    errors += parsed.errors
+                                }
+
+                                importProgress = null
+                                importResult = ImportResult(
+                                    successCount = successCount,
+                                    errorCount = errors.size,
+                                    errors = errors,
+                                )
+                                successfullyImportedUris = importedUris.distinct()
+                            }
+                        },
+                    ) {
+                        Text("Import all")
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(
+                        onClick = {
+                            val uris = pendingBatchUris
+                            pendingBatchUris = emptyList()
+                            scope.launch { parseAndIngest(uris) }
+                        },
+                    ) {
+                        Text("Preview first")
+                    }
+                    TextButton(onClick = { pendingBatchUris = emptyList() }) {
+                        Text(stringResource(MR.strings.action_cancel))
+                    }
+                },
+            )
         }
 
         val canNavigateBack = importProgress?.isRunning != true

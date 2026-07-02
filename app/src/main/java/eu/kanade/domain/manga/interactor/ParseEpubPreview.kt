@@ -5,6 +5,11 @@ import android.net.Uri
 import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import mihon.core.archive.EpubReader
 import mihon.core.archive.epubReader
 import org.jsoup.nodes.Element
@@ -45,65 +50,76 @@ class ParseEpubPreview {
         val errors: List<String>,
     )
 
-    suspend fun parseSelected(context: Context, uris: List<Uri>): Result {
-        val errors = mutableListOf<String>()
-        val files = uris.mapNotNull { uri ->
-            runCatching {
-                val inputStream = context.contentResolver.openInputStream(uri) ?: return@mapNotNull null
-                val fileName = getFileNameFromUri(context, uri) ?: "unknown.epub"
+    suspend fun parseSelected(context: Context, uris: List<Uri>): Result = coroutineScope {
+        val errors = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val semaphore = Semaphore(PARSE_CONCURRENCY)
 
-                if (!fileName.endsWith(".epub", ignoreCase = true)) {
-                    errors += "Skipped non-EPUB file: $fileName"
-                    inputStream.close()
-                    return@mapNotNull null
+        val files = uris.map { uri ->
+            async {
+                semaphore.withPermit {
+                    runCatching {
+                        val inputStream = context.contentResolver.openInputStream(uri) ?: return@runCatching null
+                        val fileName = getFileNameFromUri(context, uri) ?: "unknown.epub"
+
+                        if (!fileName.endsWith(".epub", ignoreCase = true)) {
+                            errors += "Skipped non-EPUB file: $fileName"
+                            inputStream.close()
+                            return@runCatching null
+                        }
+
+                        val tempFile = File.createTempFile("epub_import_", ".epub", context.cacheDir)
+                        tempFile.outputStream().use { out -> inputStream.copyTo(out) }
+                        inputStream.close()
+
+                        val uniFile = UniFile.fromFile(tempFile)
+                        val epubReader = uniFile!!.epubReader(context)
+
+                        val manga = SManga.create()
+                        val chapter = SChapter.create()
+                        epubReader.fillMetadata(manga, chapter)
+
+                        val metadataTitle = manga.title.takeIf { it.isNotBlank() }
+                        val title = metadataTitle
+                            ?: chapter.name.takeIf { it.isNotBlank() }
+                            ?: fileName.removeSuffix(".epub")
+
+                        val collectionMetadata = extractCollectionMetadata(epubReader)
+
+                        val coverUri = extractCoverUri(context, epubReader, manga)
+                        val tableOfContents = runCatching {
+                            epubReader.getNormalizedTableOfContents()
+                                .map { it.title.trim() }
+                                .filter { it.isNotEmpty() }
+                        }.getOrDefault(emptyList())
+
+                        epubReader.close()
+                        tempFile.delete()
+
+                        PreviewFile(
+                            uri = uri,
+                            fileName = fileName,
+                            title = title,
+                            author = manga.author,
+                            description = manga.description,
+                            coverUri = coverUri,
+                            collection = collectionMetadata.collection ?: metadataTitle,
+                            collectionPosition = collectionMetadata.position,
+                            genres = manga.genre,
+                            tableOfContents = tableOfContents,
+                        )
+                    }.onFailure {
+                        errors += "Failed to parse EPUB: ${it.message}"
+                    }.getOrNull()
                 }
+            }
+        }.awaitAll().filterNotNull()
 
-                val tempFile = File.createTempFile("epub_import_", ".epub", context.cacheDir)
-                tempFile.outputStream().use { out -> inputStream.copyTo(out) }
-                inputStream.close()
+        Result(files = files, errors = errors)
+    }
 
-                val uniFile = UniFile.fromFile(tempFile)
-                val epubReader = uniFile!!.epubReader(context)
-
-                val manga = SManga.create()
-                val chapter = SChapter.create()
-                epubReader.fillMetadata(manga, chapter)
-
-                val metadataTitle = manga.title.takeIf { it.isNotBlank() }
-                val title = metadataTitle
-                    ?: chapter.name.takeIf { it.isNotBlank() }
-                    ?: fileName.removeSuffix(".epub")
-
-                val collectionMetadata = extractCollectionMetadata(epubReader)
-
-                val coverUri = extractCoverUri(context, epubReader, manga)
-                val tableOfContents = runCatching {
-                    epubReader.getNormalizedTableOfContents()
-                        .map { it.title.trim() }
-                        .filter { it.isNotEmpty() }
-                }.getOrDefault(emptyList())
-
-                epubReader.close()
-                tempFile.delete()
-
-                PreviewFile(
-                    uri = uri,
-                    fileName = fileName,
-                    title = title,
-                    author = manga.author,
-                    description = manga.description,
-                    coverUri = coverUri,
-                    collection = collectionMetadata.collection ?: metadataTitle,
-                    collectionPosition = collectionMetadata.position,
-                    genres = manga.genre,
-                    tableOfContents = tableOfContents,
-                )
-            }.onFailure {
-                errors += "Failed to parse EPUB: ${it.message}"
-            }.getOrNull()
-        }
-
-        return Result(files = files, errors = errors)
+    companion object {
+        /** Max simultaneous EPUB parses — each holds a temp file + ZIP handle in memory. */
+        private const val PARSE_CONCURRENCY = 4
     }
 
     fun defaultCustomTitle(files: List<PreviewFile>): String {
