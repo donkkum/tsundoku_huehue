@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
-import android.util.Base64
 import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.UnmeteredSource
@@ -473,7 +472,7 @@ actual class LocalNovelSource : CatalogueSource, UnmeteredSource {
                     chapterFile.openInputStream().use { MobiTextExtractor.extractHtml(it) }
                 }
                 chapterFile.extension.equals("pdf", true) -> {
-                    renderPdfToHtml(context, chapterFile)
+                    buildPdfHtml(context, chapterFile, page.url)
                 }
                 else -> {
                     throw Exception("Unsupported chapter format: ${chapterFile.extension}")
@@ -508,6 +507,17 @@ actual class LocalNovelSource : CatalogueSource, UnmeteredSource {
                         reader.getInputStream(imagePath)?.readBytes()?.let { java.io.ByteArrayInputStream(it) }
                     }
                 }
+                chapterFile.extension.equals("pdf", true) -> {
+                    // imagePath is "pdf_page_N.jpg" — serve from the per-chapter page cache
+                    val pageIndex = imagePath.removePrefix("pdf_page_").removeSuffix(".jpg").toIntOrNull()
+                        ?: return@withIOContext null
+                    val pageFile = pdfPageCacheFile(context, chapter.url, pageIndex)
+                    if (pageFile.exists()) {
+                        java.io.ByteArrayInputStream(pageFile.readBytes())
+                    } else {
+                        null
+                    }
+                }
                 else -> null
             }
         } catch (e: Exception) {
@@ -517,46 +527,57 @@ actual class LocalNovelSource : CatalogueSource, UnmeteredSource {
     }
 
     /**
-     * Renders every page of a PDF to a JPEG (85% quality) and returns an HTML document
-     * with all pages embedded as base64 data URIs. Capped at 500 pages to prevent OOM.
-     *
-     * Requires a seekable file descriptor, so the PDF is copied to a temp file first when
-     * the source UniFile is not directly openable as a ParcelFileDescriptor.
+     * Renders each page of a PDF to a JPEG in the per-chapter cache directory, then
+     * returns a lightweight HTML document whose <img> tags reference those cached files
+     * by name (e.g. "pdf_page_0.jpg"). The images are served lazily on demand via
+     * [getChapterImage] rather than being embedded as base64 — this avoids producing
+     * multi-MB HTML strings that crash the WebView.
      */
-    private fun renderPdfToHtml(context: Context, pdfFile: UniFile): String {
-        val tempFile = java.io.File.createTempFile("pdf_read_", ".pdf", context.cacheDir)
+    private fun buildPdfHtml(context: Context, pdfFile: UniFile, chapterUrl: String): String {
+        val tempPdf = java.io.File.createTempFile("pdf_read_", ".pdf", context.cacheDir)
         try {
-            pdfFile.openInputStream().use { it.copyTo(tempFile.outputStream()) }
-            PdfRenderer(ParcelFileDescriptor.open(tempFile, ParcelFileDescriptor.MODE_READ_ONLY)).use { renderer ->
+            pdfFile.openInputStream().use { it.copyTo(tempPdf.outputStream()) }
+            PdfRenderer(ParcelFileDescriptor.open(tempPdf, ParcelFileDescriptor.MODE_READ_ONLY)).use { renderer ->
                 val pageCount = minOf(renderer.pageCount, MAX_PDF_PAGES)
-                return buildString {
-                    append("<html><body style='margin:0;padding:8px;background:#1a1a1a'>")
-                    for (i in 0 until pageCount) {
+                // Pre-render every page to the cache so getChapterImage can serve them immediately.
+                for (i in 0 until pageCount) {
+                    val dest = pdfPageCacheFile(context, chapterUrl, i)
+                    if (!dest.exists()) {
                         renderer.openPage(i).use { page ->
                             val scale = PDF_RENDER_DPI / 72f
                             val w = (page.width * scale).toInt().coerceAtLeast(1)
                             val h = (page.height * scale).toInt().coerceAtLeast(1)
                             val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
                             page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                            val baos = java.io.ByteArrayOutputStream()
-                            bitmap.compress(Bitmap.CompressFormat.JPEG, PDF_JPEG_QUALITY, baos)
+                            dest.outputStream().use { out ->
+                                bitmap.compress(Bitmap.CompressFormat.JPEG, PDF_JPEG_QUALITY, out)
+                            }
                             bitmap.recycle()
-                            val b64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
-                            append("<img src='data:image/jpeg;base64,$b64' ")
-                            append("style='width:100%;display:block;margin-bottom:8px;border-radius:2px'>")
                         }
+                    }
+                }
+                return buildString {
+                    append("<html><body style='margin:0;padding:8px;background:#1a1a1a'>")
+                    for (i in 0 until pageCount) {
+                        append("<img src='pdf_page_$i.jpg' style='width:100%;display:block;margin-bottom:8px'>")
                     }
                     if (renderer.pageCount > MAX_PDF_PAGES) {
                         append("<p style='color:#aaa;text-align:center;padding:16px'>")
-                        append("Showing first $MAX_PDF_PAGES of ${renderer.pageCount} pages.")
-                        append("</p>")
+                        append("Showing first $MAX_PDF_PAGES of ${renderer.pageCount} pages.</p>")
                     }
                     append("</body></html>")
                 }
             }
         } finally {
-            tempFile.delete()
+            tempPdf.delete()
         }
+    }
+
+    /** Returns a stable cache file path for a single rendered PDF page. */
+    private fun pdfPageCacheFile(context: Context, chapterUrl: String, pageIndex: Int): java.io.File {
+        val key = chapterUrl.hashCode().toUInt().toString(16)
+        val dir = java.io.File(context.cacheDir, "pdf_pages/$key").also { it.mkdirs() }
+        return java.io.File(dir, "pdf_page_$pageIndex.jpg")
     }
 
     private fun isTextFile(file: UniFile): Boolean {
