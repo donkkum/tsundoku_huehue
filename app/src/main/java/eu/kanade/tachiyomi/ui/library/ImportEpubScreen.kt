@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FileOpen
+import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Refresh
@@ -229,6 +230,24 @@ class ImportEpubScreen(
         ) { uris ->
             if (uris.isEmpty()) return@rememberLauncherForActivityResult
             scope.launch { parseAndIngest(uris) }
+        }
+
+        val folderPickerLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocumentTree(),
+        ) { treeUri ->
+            if (treeUri == null) return@rememberLauncherForActivityResult
+            scope.launch {
+                isParsing = true
+                val epubUris = withContext(Dispatchers.IO) {
+                    collectEpubsFromFolder(context, treeUri)
+                }
+                isParsing = false
+                if (epubUris.isEmpty()) {
+                    snackbarHostState.showSnackbar("No EPUB files found in the selected folder")
+                    return@launch
+                }
+                parseAndIngest(epubUris)
+            }
         }
 
         fun moveGroup(groupId: String, offset: Int) {
@@ -468,6 +487,9 @@ class ImportEpubScreen(
                         onPickFiles = {
                             filePickerLauncher.launch(arrayOf("application/epub+zip"))
                         },
+                        onPickFolder = {
+                            folderPickerLauncher.launch(null)
+                        },
                         onMoveGroupUp = { groupId -> moveGroup(groupId, -1) },
                         onMoveGroupDown = { groupId -> moveGroup(groupId, 1) },
                         onRemoveGroup = { groupId -> removeGroup(groupId) },
@@ -605,6 +627,7 @@ private fun ImportSelectionContent(
     onCategoryMenuExpandedChange: (Boolean) -> Unit,
     onCategorySelected: (Long) -> Unit,
     onPickFiles: () -> Unit,
+    onPickFolder: () -> Unit,
     onMoveGroupUp: (groupId: String) -> Unit,
     onMoveGroupDown: (groupId: String) -> Unit,
     onRemoveGroup: (groupId: String) -> Unit,
@@ -624,13 +647,26 @@ private fun ImportSelectionContent(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            OutlinedButton(
-                onClick = onPickFiles,
+            Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Icon(Icons.Outlined.FileOpen, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(TDMR.strings.epub_select_files))
+                OutlinedButton(
+                    onClick = onPickFiles,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Outlined.FileOpen, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(TDMR.strings.epub_select_files))
+                }
+                OutlinedButton(
+                    onClick = onPickFolder,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Outlined.FolderOpen, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("From folder")
+                }
             }
         }
 
@@ -1521,6 +1557,38 @@ private fun normalizeVolumeKey(raw: String): String {
         .replace(NON_WORD_REGEX, " ")
         .replace(MULTI_SPACE_REGEX, " ")
         .trim()
+}
+
+/**
+ * Recursively walks a folder tree (picked via ACTION_OPEN_DOCUMENT_TREE) and
+ * returns the content URIs of every EPUB file found, up to [maxDepth] levels deep.
+ */
+private fun collectEpubsFromFolder(
+    context: Context,
+    treeUri: Uri,
+    maxDepth: Int = 5,
+): List<Uri> {
+    val root = DocumentFile.fromTreeUri(context, treeUri) ?: return emptyList()
+    val results = mutableListOf<Uri>()
+
+    fun walk(dir: DocumentFile, depth: Int) {
+        if (depth > maxDepth) return
+        for (child in dir.listFiles()) {
+            when {
+                child.isDirectory -> walk(child, depth + 1)
+                child.isFile && isEpubFile(child) -> child.uri.let(results::add)
+            }
+        }
+    }
+
+    walk(root, 0)
+    return results
+}
+
+private fun isEpubFile(file: DocumentFile): Boolean {
+    val mimeType = file.type
+    if (mimeType == "application/epub+zip") return true
+    return file.name?.endsWith(".epub", ignoreCase = true) == true
 }
 
 private fun <T> MutableList<T>.moveItem(fromIndex: Int, toIndex: Int) {
