@@ -33,8 +33,6 @@ object SettingsNovelReaderScreen : SearchableSettings {
             readerPref.novelMarginBottom,
             readerPref.novelAutoLoadNextChapterAt,
             readerPref.novelSourceCssPriority,
-            readerPref.novelTtsSpeed,
-            readerPref.novelTtsPitch,
         )
     }
 
@@ -54,7 +52,6 @@ object SettingsNovelReaderScreen : SearchableSettings {
             getNavigationGroup(readerPref),
             getAutoScrollGroup(readerPref),
             getContentGroup(readerPref),
-            getTtsGroup(readerPref),
         )
     }
 
@@ -337,34 +334,4 @@ object SettingsNovelReaderScreen : SearchableSettings {
         )
     }
 
-    @Composable
-    private fun getTtsGroup(readerPreferences: ReaderPreferences): Preference.PreferenceGroup {
-        val ttsSpeed = readerPreferences.novelTtsSpeed.collectAsState().value
-        val ttsPitch = readerPreferences.novelTtsPitch.collectAsState().value
-
-        return Preference.PreferenceGroup(
-            title = "Text-to-Speech",
-            preferenceItems = listOf(
-                Preference.PreferenceItem.SliderPreference(
-                    value = (ttsSpeed * 10).toInt(),
-                    valueRange = 1..30,
-                    title = "TTS speed",
-                    valueString = "${ttsSpeed}x",
-                    onValueChanged = { readerPreferences.novelTtsSpeed.set(it / 10f) },
-                ),
-                Preference.PreferenceItem.SliderPreference(
-                    value = (ttsPitch * 10).toInt(),
-                    valueRange = 1..30,
-                    title = "TTS pitch",
-                    valueString = "${ttsPitch}x",
-                    onValueChanged = { readerPreferences.novelTtsPitch.set(it / 10f) },
-                ),
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = readerPreferences.novelTtsAutoNextChapter,
-                    title = "TTS auto-next chapter",
-                    subtitle = "Automatically continue to next chapter when TTS finishes",
-                ),
-            ),
-        )
-    }
 }

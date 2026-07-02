@@ -32,7 +32,7 @@ internal class ChapterTextBlock(
     /** Start offset of each chunk view's text within [fullText]. */
     var chunkStarts = IntArray(0)
 
-    /** Concatenation of all chunk texts; the text TTS and offset mapping operate on. */
+    /** Concatenation of all chunk texts; used for offset mapping. */
     var fullText: String? = null
 
     /**
