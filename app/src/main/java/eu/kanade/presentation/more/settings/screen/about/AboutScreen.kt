@@ -30,23 +30,22 @@ import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
 import eu.kanade.presentation.util.LocalBackPress
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.BuildConfig
-import eu.kanade.tachiyomi.data.updater.AppUpdateChecker
+
 import eu.kanade.tachiyomi.data.updater.RELEASE_URL
-import eu.kanade.tachiyomi.ui.more.NewUpdateScreen
+
 import eu.kanade.tachiyomi.util.CrashLogUtil
 import eu.kanade.tachiyomi.util.lang.toDateTimestampString
 import eu.kanade.tachiyomi.util.system.copyToClipboard
 import eu.kanade.tachiyomi.util.system.isNightlyBuildType
 import eu.kanade.tachiyomi.util.system.isPreviewBuildType
 import eu.kanade.tachiyomi.util.system.toast
-import eu.kanade.tachiyomi.util.system.updaterEnabled
+
 import kotlinx.coroutines.launch
 import logcat.LogPriority
 import tachiyomi.core.common.Constants
-import tachiyomi.core.common.util.lang.withIOContext
-import tachiyomi.core.common.util.lang.withUIContext
+
 import tachiyomi.core.common.util.system.logcat
-import tachiyomi.domain.release.interactor.GetApplicationRelease
+
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.LinkIcon
 import tachiyomi.presentation.core.components.ScrollbarLazyColumn
@@ -73,8 +72,6 @@ object AboutScreen : Screen() {
         val uriHandler = LocalUriHandler.current
         val handleBack = LocalBackPress.current
         val navigator = LocalNavigator.currentOrThrow
-        var isCheckingUpdates by remember { mutableStateOf(false) }
-
         Scaffold(
             topBar = { scrollBehavior ->
                 AppBar(
@@ -102,45 +99,6 @@ object AboutScreen : Screen() {
                             context.copyToClipboard("Debug information", deviceInfo)
                         },
                     )
-                }
-
-                if (updaterEnabled) {
-                    item {
-                        TextPreferenceWidget(
-                            title = stringResource(MR.strings.check_for_updates),
-                            widget = {
-                                AnimatedVisibility(visible = isCheckingUpdates) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(28.dp),
-                                        strokeWidth = 3.dp,
-                                    )
-                                }
-                            },
-                            onPreferenceClick = {
-                                if (!isCheckingUpdates) {
-                                    scope.launch {
-                                        isCheckingUpdates = true
-
-                                        checkVersion(
-                                            context = context,
-                                            onAvailableUpdate = { result ->
-                                                val updateScreen = NewUpdateScreen(
-                                                    versionName = result.release.version,
-                                                    changelogInfo = result.release.info,
-                                                    releaseLink = result.release.releaseLink,
-                                                    downloadLink = result.release.downloadLink,
-                                                )
-                                                navigator.push(updateScreen)
-                                            },
-                                            onFinish = {
-                                                isCheckingUpdates = false
-                                            },
-                                        )
-                                    }
-                                }
-                            },
-                        )
-                    }
                 }
 
                 if (!BuildConfig.DEBUG) {
@@ -205,37 +163,6 @@ object AboutScreen : Screen() {
                         )
                     }
                 }
-            }
-        }
-    }
-
-    /**
-     * Checks version and shows a user prompt if an update is available.
-     */
-    private suspend fun checkVersion(
-        context: Context,
-        onAvailableUpdate: (GetApplicationRelease.Result.NewUpdate) -> Unit,
-        onFinish: () -> Unit,
-    ) {
-        val updateChecker = AppUpdateChecker()
-        withUIContext {
-            try {
-                when (val result = withIOContext { updateChecker.checkForUpdate(context, forceCheck = true) }) {
-                    is GetApplicationRelease.Result.NewUpdate -> {
-                        onAvailableUpdate(result)
-                    }
-                    is GetApplicationRelease.Result.NoNewUpdate -> {
-                        context.toast(MR.strings.update_check_no_new_updates)
-                    }
-                    is GetApplicationRelease.Result.OsTooOld -> {
-                        context.toast(MR.strings.update_check_eol)
-                    }
-                }
-            } catch (e: Exception) {
-                context.toast(e.message)
-                logcat(LogPriority.ERROR, e)
-            } finally {
-                onFinish()
             }
         }
     }
