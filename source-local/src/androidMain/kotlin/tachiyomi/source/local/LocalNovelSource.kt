@@ -468,7 +468,7 @@ actual class LocalNovelSource : CatalogueSource, UnmeteredSource {
                     // Direct text file
                     chapterFile.openInputStream().bufferedReader().readText()
                 }
-                chapterFile.extension.equals("mobi", true) -> {
+                chapterFile.extension?.lowercase() in setOf("mobi", "azw", "azw3") -> {
                     chapterFile.openInputStream().use { MobiTextExtractor.extractHtml(it) }
                 }
                 chapterFile.extension.equals("pdf", true) -> {
@@ -630,7 +630,7 @@ actual class LocalNovelSource : CatalogueSource, UnmeteredSource {
             "md", "markdown", // Markdown
             "html", "htm", "xhtml", // HTML
             "epub", // EPUB
-            "mobi", // MOBI / PalmDOC ebook
+            "mobi", "azw", "azw3", // MOBI / PalmDOC / Kindle ebook
             "pdf", // PDF document
             "zip", "cbz", // ZIP archives
             "rar", "cbr", // RAR archives

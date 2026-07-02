@@ -253,7 +253,7 @@ class ImportEpubScreen(
                 }
                 isParsing = false
                 when {
-                    epubUris.isEmpty() -> snackbarHostState.showSnackbar("No supported book files found in the selected folder (epub, txt, mobi, pdf)")
+                    epubUris.isEmpty() -> snackbarHostState.showSnackbar("No supported book files found in the selected folder (epub, txt, mobi, azw, pdf)")
                     epubUris.size > BATCH_IMPORT_THRESHOLD -> pendingBatchUris = epubUris
                     else -> parseAndIngest(epubUris)
                 }
@@ -1748,7 +1748,7 @@ private fun collectBookFilesFromFolder(
     return results
 }
 
-private val SUPPORTED_BOOK_EXTENSIONS = setOf("epub", "txt", "text", "mobi", "pdf")
+private val SUPPORTED_BOOK_EXTENSIONS = setOf("epub", "txt", "text", "mobi", "azw", "azw3", "pdf")
 private val SUPPORTED_BOOK_MIME_TYPES = setOf(
     "application/epub+zip",
     "text/plain",

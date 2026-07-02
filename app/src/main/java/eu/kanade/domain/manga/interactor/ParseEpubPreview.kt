@@ -138,7 +138,7 @@ class ParseEpubPreview {
         /** Max simultaneous EPUB parses — each holds a temp file + ZIP handle in memory. */
         private const val PARSE_CONCURRENCY = 4
 
-        val SUPPORTED_IMPORT_EXTENSIONS = setOf("epub", "txt", "text", "mobi", "pdf")
+        val SUPPORTED_IMPORT_EXTENSIONS = setOf("epub", "txt", "text", "mobi", "azw", "azw3", "pdf")
     }
 
     fun defaultCustomTitle(files: List<PreviewFile>): String {
