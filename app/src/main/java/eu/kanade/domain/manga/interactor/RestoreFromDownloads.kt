@@ -6,6 +6,11 @@ import com.hippo.unifile.UniFile
 import eu.kanade.domain.chapter.interactor.SyncChaptersWithSource
 import eu.kanade.domain.manga.model.toSManga
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import mihon.domain.manga.model.toDomainManga
 import tachiyomi.domain.category.interactor.SetMangaCategories
@@ -17,6 +22,7 @@ import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.domain.storage.service.StorageManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Scans an existing downloads folder for previously downloaded novels (HTML chapters)
@@ -44,6 +50,8 @@ class RestoreFromDownloads(
         private val HTML_EXTENSIONS = setOf("html", "htm", "xhtml")
         private val TEXT_EXTENSIONS = setOf("txt", "text")
         private val CONTENT_EXTENSIONS = HTML_EXTENSIONS + TEXT_EXTENSIONS
+        // Max novels processed in parallel — file I/O + DB bound
+        private const val CONCURRENCY = 6
     }
 
     data class NovelCandidate(
@@ -82,75 +90,73 @@ class RestoreFromDownloads(
             ?: return@withContext Result(0, 0, listOf("Local novel source not found"))
 
         val novels = discoverNovels(root)
-        val errors = mutableListOf<String>()
-        var restored = 0
-        var skipped = 0
+        val errors = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val restored = AtomicInteger(0)
+        val skipped = AtomicInteger(0)
+        val semaphore = Semaphore(CONCURRENCY)
+        val counter = AtomicInteger(0)
 
-        novels.forEachIndexed { index, novel ->
-            onProgress(index + 1, novels.size, novel.title)
+        coroutineScope {
+            novels.map { novel ->
+                async {
+                    semaphore.withPermit {
+                        val idx = counter.incrementAndGet()
+                        onProgress(idx, novels.size, novel.title)
 
-            if (novel.chapters.isEmpty()) {
-                skipped++
-                return@forEachIndexed
-            }
+                        if (novel.chapters.isEmpty()) {
+                            skipped.incrementAndGet()
+                            return@withPermit
+                        }
 
-            try {
-                val sanitized = sanitize(novel.title)
-                val novelDir = localNovelsDir.findFile(sanitized) ?: localNovelsDir.createDirectory(sanitized)
-                if (novelDir == null) {
-                    errors.add("${novel.title}: could not create directory")
-                    return@forEachIndexed
-                }
+                        try {
+                            val sanitized = sanitize(novel.title)
+                            val novelDir = localNovelsDir.findFile(sanitized)
+                                ?: localNovelsDir.createDirectory(sanitized)
+                            if (novelDir == null) {
+                                errors.add("${novel.title}: could not create directory")
+                                return@withPermit
+                            }
 
-                var wroteAny = false
-                novel.chapters.forEach { chapter ->
-                    val chapterFileName = "${sanitize(chapter.name)}.html"
-                    // Skip if already exists (idempotent)
-                    if (novelDir.findFile(chapterFileName) != null) return@forEach
+                            novel.chapters.forEach { chapter ->
+                                val chapterFileName = "${sanitize(chapter.name)}.html"
+                                if (novelDir.findFile(chapterFileName) != null) return@forEach
 
-                    val content = mergeChapterFiles(context, chapter.files)
-                    if (content.isNullOrBlank()) return@forEach
+                                val destFile = novelDir.createFile(chapterFileName) ?: return@forEach
+                                streamChapterFiles(context, chapter.files, destFile)
+                            }
 
-                    val destFile = novelDir.createFile(chapterFileName) ?: return@forEach
-                    destFile.openOutputStream().use { it.write(content.toByteArray()) }
-                    wroteAny = true
-                }
+                            // Register in DB
+                            val existing = getMangaByUrlAndSourceId.await(sanitized, LOCAL_NOVEL_SOURCE_ID)
+                            val manga = existing ?: run {
+                                val placeholder = eu.kanade.tachiyomi.source.model.SManga.create().apply {
+                                    title = novel.title
+                                    url = sanitized
+                                }
+                                networkToLocalManga(placeholder.toDomainManga(LOCAL_NOVEL_SOURCE_ID, isNovel = true))
+                            }
 
-                if (!wroteAny && novel.chapters.all { ch ->
-                    novelDir.findFile("${sanitize(ch.name)}.html") != null
-                }) {
-                    // All chapters already present — still register in DB
-                }
+                            mangaRepository.update(MangaUpdate(id = manga.id, favorite = true, dateAdded = System.currentTimeMillis(), isNovel = true))
 
-                // Register in DB
-                val existing = getMangaByUrlAndSourceId.await(sanitized, LOCAL_NOVEL_SOURCE_ID)
-                val manga = existing ?: run {
-                    val placeholder = eu.kanade.tachiyomi.source.model.SManga.create().apply {
-                        title = novel.title
-                        url = sanitized
+                            val networkManga = source.getMangaDetails(manga.toSManga())
+                            updateManga.awaitUpdateFromSource(manga, networkManga, manualFetch = true)
+
+                            val chapters = source.getChapterList(manga.toSManga())
+                            syncChaptersWithSource.await(chapters, manga, source, manualFetch = true)
+
+                            if (categoryId != null && categoryId != 0L) {
+                                setMangaCategories.await(manga.id, listOf(categoryId))
+                            }
+
+                            restored.incrementAndGet()
+                        } catch (e: Exception) {
+                            errors.add("${novel.title}: ${e.message}")
+                        }
                     }
-                    networkToLocalManga(placeholder.toDomainManga(LOCAL_NOVEL_SOURCE_ID, isNovel = true))
                 }
-
-                mangaRepository.update(MangaUpdate(id = manga.id, favorite = true, dateAdded = System.currentTimeMillis(), isNovel = true))
-
-                val networkManga = source.getMangaDetails(manga.toSManga())
-                updateManga.awaitUpdateFromSource(manga, networkManga, manualFetch = true)
-
-                val chapters = source.getChapterList(manga.toSManga())
-                syncChaptersWithSource.await(chapters, manga, source, manualFetch = true)
-
-                if (categoryId != null && categoryId != 0L) {
-                    setMangaCategories.await(manga.id, listOf(categoryId))
-                }
-
-                restored++
-            } catch (e: Exception) {
-                errors.add("${novel.title}: ${e.message}")
-            }
+            }.awaitAll()
         }
 
-        Result(restored = restored, skipped = skipped, errors = errors)
+        Result(restored = restored.get(), skipped = skipped.get(), errors = errors)
     }
 
     // ── Discovery ────────────────────────────────────────────────────────────
@@ -228,11 +234,16 @@ class RestoreFromDownloads(
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private fun mergeChapterFiles(context: Context, files: List<UniFile>): String? {
-        if (files.isEmpty()) return null
-        return files.mapNotNull { file ->
-            context.contentResolver.openInputStream(file.uri)?.use { it.bufferedReader().readText() }
-        }.joinToString("\n\n").ifBlank { null }
+    /** Stream chapter files directly into [dest] without loading into memory. */
+    private fun streamChapterFiles(context: Context, files: List<UniFile>, dest: UniFile) {
+        if (files.isEmpty()) return
+        val separator = "\n\n".toByteArray()
+        dest.openOutputStream().buffered().use { out ->
+            files.forEachIndexed { i, file ->
+                context.contentResolver.openInputStream(file.uri)?.buffered()?.use { it.copyTo(out) }
+                if (i < files.size - 1) out.write(separator)
+            }
+        }
     }
 
     private fun sanitize(name: String): String =
