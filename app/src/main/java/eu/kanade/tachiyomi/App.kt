@@ -67,7 +67,7 @@ import tachiyomi.domain.library.interactor.RefreshLibraryCache
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.widget.WidgetManager
-import tsundoku.telemetry.TelemetryConfig
+
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
@@ -85,8 +85,6 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
     override fun onCreate() {
         super<Application>.onCreate()
         patchInjekt()
-        TelemetryConfig.init(applicationContext)
-
         GlobalExceptionHandler.initialize(applicationContext, CrashActivity::class.java)
 
         // TLS 1.3 support for Android < 10
@@ -154,16 +152,6 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
                     cancelNotification(Notifications.ID_INCOGNITO_MODE)
                 }
             }
-            .launchIn(scope)
-
-        privacyPreferences.analytics
-            .changes()
-            .onEach(TelemetryConfig::setAnalyticsEnabled)
-            .launchIn(scope)
-
-        privacyPreferences.crashlytics
-            .changes()
-            .onEach(TelemetryConfig::setCrashlyticsEnabled)
             .launchIn(scope)
 
         basePreferences.hardwareBitmapThreshold.let { preference ->
