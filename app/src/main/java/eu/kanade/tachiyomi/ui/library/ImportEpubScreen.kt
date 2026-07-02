@@ -249,11 +249,11 @@ class ImportEpubScreen(
             scope.launch {
                 isParsing = true
                 val epubUris = withContext(Dispatchers.IO) {
-                    collectEpubsFromFolder(context, treeUri)
+                    collectBookFilesFromFolder(context, treeUri)
                 }
                 isParsing = false
                 when {
-                    epubUris.isEmpty() -> snackbarHostState.showSnackbar("No EPUB files found in the selected folder")
+                    epubUris.isEmpty() -> snackbarHostState.showSnackbar("No supported book files found in the selected folder (epub, txt, mobi, pdf)")
                     epubUris.size > BATCH_IMPORT_THRESHOLD -> pendingBatchUris = epubUris
                     else -> parseAndIngest(epubUris)
                 }
@@ -644,7 +644,17 @@ class ImportEpubScreen(
                         onCategoryMenuExpandedChange = { categoryMenuExpanded = it },
                         onCategorySelected = { selectedCategoryId = it },
                         onPickFiles = {
-                            filePickerLauncher.launch(arrayOf("application/epub+zip"))
+                            filePickerLauncher.launch(
+                                arrayOf(
+                                    "application/epub+zip",
+                                    "text/plain",
+                                    "application/pdf",
+                                    "application/x-mobipocket-ebook",
+                                    "application/vnd.amazon.ebook",
+                                    // Some file managers use a wildcard for mobi/azw
+                                    "application/octet-stream",
+                                ),
+                            )
                         },
                         onPickFolder = {
                             folderPickerLauncher.launch(null)
@@ -1722,7 +1732,7 @@ private fun normalizeVolumeKey(raw: String): String {
  * Recursively walks a folder tree (picked via ACTION_OPEN_DOCUMENT_TREE) and
  * returns the content URIs of every EPUB file found, up to [maxDepth] levels deep.
  */
-private fun collectEpubsFromFolder(
+private fun collectBookFilesFromFolder(
     context: Context,
     treeUri: Uri,
     maxDepth: Int = 5,
@@ -1735,7 +1745,7 @@ private fun collectEpubsFromFolder(
         for (child in dir.listFiles()) {
             when {
                 child.isDirectory -> walk(child, depth + 1)
-                child.isFile && isEpubFile(child) -> child.uri.let(results::add)
+                child.isFile && isSupportedBookFile(child) -> child.uri.let(results::add)
             }
         }
     }
@@ -1744,10 +1754,20 @@ private fun collectEpubsFromFolder(
     return results
 }
 
-private fun isEpubFile(file: DocumentFile): Boolean {
+private val SUPPORTED_BOOK_EXTENSIONS = setOf("epub", "txt", "text", "mobi", "pdf")
+private val SUPPORTED_BOOK_MIME_TYPES = setOf(
+    "application/epub+zip",
+    "text/plain",
+    "application/pdf",
+    "application/x-mobipocket-ebook",
+    "application/vnd.amazon.ebook",
+)
+
+private fun isSupportedBookFile(file: DocumentFile): Boolean {
     val mimeType = file.type
-    if (mimeType == "application/epub+zip") return true
-    return file.name?.endsWith(".epub", ignoreCase = true) == true
+    if (mimeType != null && mimeType in SUPPORTED_BOOK_MIME_TYPES) return true
+    val ext = file.name?.substringAfterLast('.', "")?.lowercase() ?: return false
+    return ext in SUPPORTED_BOOK_EXTENSIONS
 }
 
 private fun <T> MutableList<T>.moveItem(fromIndex: Int, toIndex: Int) {

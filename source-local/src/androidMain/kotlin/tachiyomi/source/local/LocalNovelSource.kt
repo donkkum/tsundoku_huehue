@@ -1,6 +1,10 @@
 package tachiyomi.source.local
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.pdf.PdfRenderer
+import android.os.ParcelFileDescriptor
+import android.util.Base64
 import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.UnmeteredSource
@@ -38,6 +42,7 @@ import tachiyomi.source.local.image.LocalNovelCoverManager
 import tachiyomi.source.local.io.Archive
 import tachiyomi.source.local.io.Format
 import tachiyomi.source.local.io.LocalNovelSourceFileSystem
+import tachiyomi.source.local.io.MobiTextExtractor
 import tachiyomi.source.local.metadata.fillMetadata
 import uy.kohesive.injekt.injectLazy
 import java.io.ByteArrayInputStream
@@ -464,6 +469,12 @@ actual class LocalNovelSource : CatalogueSource, UnmeteredSource {
                     // Direct text file
                     chapterFile.openInputStream().bufferedReader().readText()
                 }
+                chapterFile.extension.equals("mobi", true) -> {
+                    chapterFile.openInputStream().use { MobiTextExtractor.extractHtml(it) }
+                }
+                chapterFile.extension.equals("pdf", true) -> {
+                    renderPdfToHtml(context, chapterFile)
+                }
                 else -> {
                     throw Exception("Unsupported chapter format: ${chapterFile.extension}")
                 }
@@ -502,6 +513,49 @@ actual class LocalNovelSource : CatalogueSource, UnmeteredSource {
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e) { "Error fetching image $imagePath for ${chapter.url}" }
             null
+        }
+    }
+
+    /**
+     * Renders every page of a PDF to a JPEG (85% quality) and returns an HTML document
+     * with all pages embedded as base64 data URIs. Capped at 500 pages to prevent OOM.
+     *
+     * Requires a seekable file descriptor, so the PDF is copied to a temp file first when
+     * the source UniFile is not directly openable as a ParcelFileDescriptor.
+     */
+    private fun renderPdfToHtml(context: Context, pdfFile: UniFile): String {
+        val tempFile = java.io.File.createTempFile("pdf_read_", ".pdf", context.cacheDir)
+        try {
+            pdfFile.openInputStream().use { it.copyTo(tempFile.outputStream()) }
+            PdfRenderer(ParcelFileDescriptor.open(tempFile, ParcelFileDescriptor.MODE_READ_ONLY)).use { renderer ->
+                val pageCount = minOf(renderer.pageCount, MAX_PDF_PAGES)
+                return buildString {
+                    append("<html><body style='margin:0;padding:8px;background:#1a1a1a'>")
+                    for (i in 0 until pageCount) {
+                        renderer.openPage(i).use { page ->
+                            val scale = PDF_RENDER_DPI / 72f
+                            val w = (page.width * scale).toInt().coerceAtLeast(1)
+                            val h = (page.height * scale).toInt().coerceAtLeast(1)
+                            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                            val baos = java.io.ByteArrayOutputStream()
+                            bitmap.compress(Bitmap.CompressFormat.JPEG, PDF_JPEG_QUALITY, baos)
+                            bitmap.recycle()
+                            val b64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+                            append("<img src='data:image/jpeg;base64,$b64' ")
+                            append("style='width:100%;display:block;margin-bottom:8px;border-radius:2px'>")
+                        }
+                    }
+                    if (renderer.pageCount > MAX_PDF_PAGES) {
+                        append("<p style='color:#aaa;text-align:center;padding:16px'>")
+                        append("Showing first $MAX_PDF_PAGES of ${renderer.pageCount} pages.")
+                        append("</p>")
+                    }
+                    append("</body></html>")
+                }
+            }
+        } finally {
+            tempFile.delete()
         }
     }
 
@@ -551,6 +605,8 @@ actual class LocalNovelSource : CatalogueSource, UnmeteredSource {
             "md", "markdown", // Markdown
             "html", "htm", "xhtml", // HTML
             "epub", // EPUB
+            "mobi", // MOBI / PalmDOC ebook
+            "pdf", // PDF document
             "zip", "cbz", // ZIP archives
             "rar", "cbr", // RAR archives
         )
@@ -564,6 +620,10 @@ actual class LocalNovelSource : CatalogueSource, UnmeteredSource {
             "htm",
             "xhtml",
         )
+
+        private const val MAX_PDF_PAGES = 500
+        private const val PDF_RENDER_DPI = 150  // higher = sharper but more memory
+        private const val PDF_JPEG_QUALITY = 85
     }
 
     private fun resolveNovelEntry(url: String): UniFile? {

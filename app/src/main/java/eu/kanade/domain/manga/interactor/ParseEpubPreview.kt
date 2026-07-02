@@ -62,9 +62,20 @@ class ParseEpubPreview {
                         val fileName = getFileNameFromUri(context, uri) ?: "unknown.epub"
 
                         if (!fileName.endsWith(".epub", ignoreCase = true)) {
-                            errors += "Skipped non-EPUB file: $fileName"
+                            // Non-EPUB: return basic metadata from the filename; no parsing needed
                             inputStream.close()
-                            return@runCatching null
+                            return@runCatching PreviewFile(
+                                uri = uri,
+                                fileName = fileName,
+                                title = fileName.substringBeforeLast('.').trim(),
+                                author = null,
+                                description = null,
+                                coverUri = null,
+                                collection = null,
+                                collectionPosition = null,
+                                genres = null,
+                                tableOfContents = emptyList(),
+                            )
                         }
 
                         val tempFile = File.createTempFile("epub_import_", ".epub", context.cacheDir)
