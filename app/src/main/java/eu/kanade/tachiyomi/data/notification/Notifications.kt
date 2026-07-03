@@ -119,6 +119,13 @@ object Notifications {
     const val ID_RESTORE_DOWNLOADS_PROGRESS = -1001
     const val ID_RESTORE_DOWNLOADS_COMPLETE = -1002
 
+    /**
+     * Notification channel and ids used by the local-files background import.
+     */
+    const val CHANNEL_IMPORT_LOCAL = "import_local_channel"
+    const val ID_IMPORT_LOCAL_PROGRESS = -1011
+    const val ID_IMPORT_LOCAL_COMPLETE = -1012
+
     private val deprecatedChannels = listOf(
         "downloader_channel",
         "downloader_complete_channel",
@@ -231,6 +238,10 @@ object Notifications {
                 },
                 buildNotificationChannel(CHANNEL_RESTORE_DOWNLOADS, IMPORTANCE_LOW) {
                     setName("Restore from Downloads")
+                    setShowBadge(false)
+                },
+                buildNotificationChannel(CHANNEL_IMPORT_LOCAL, IMPORTANCE_LOW) {
+                    setName("Import local files")
                     setShowBadge(false)
                 },
             ),

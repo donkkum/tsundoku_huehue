@@ -68,6 +68,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
+import androidx.lifecycle.asFlow
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.work.WorkInfo
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import coil3.request.CachePolicy
@@ -75,6 +78,8 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import eu.kanade.domain.manga.interactor.ImportEpub
 import eu.kanade.domain.manga.interactor.ParseEpubPreview
+import eu.kanade.tachiyomi.data.library.ImportLocalFilesJob
+import eu.kanade.tachiyomi.util.system.workManager
 import eu.kanade.presentation.category.visualName
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
@@ -84,6 +89,7 @@ import eu.kanade.presentation.library.components.ImportResult
 import eu.kanade.presentation.manga.components.MangaCover
 import eu.kanade.presentation.util.Screen
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tachiyomi.domain.category.interactor.GetCategories
@@ -101,6 +107,9 @@ private const val TOC_PREVIEW_ALL_THRESHOLD = TOC_PREVIEW_SECTION_SIZE * 3
 
 /** Above this count, skip the per-file preview and offer a direct batch import. */
 private const val BATCH_IMPORT_THRESHOLD = 50
+
+/** Above this count, hand the whole folder off to a detachable background WorkManager job. */
+private const val BACKGROUND_IMPORT_THRESHOLD = 300
 
 /** How many EPUBs to parse + import per chunk in batch mode (keeps peak memory bounded). */
 private const val BATCH_CHUNK_SIZE = 20
@@ -149,6 +158,25 @@ class ImportEpubScreen(
         // Batch import: when a folder scan returns more than BATCH_IMPORT_THRESHOLD files,
         // we skip the per-file preview and just confirm → import directly.
         var pendingBatchUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+
+        // Background import (>300 files): the work runs in a detachable WorkManager job that this
+        // screen only observes, so progress survives navigating away.
+        var startedBackgroundImport by remember { mutableStateOf(false) }
+        val backgroundWorkInfo by remember {
+            context.workManager
+                .getWorkInfosByTagLiveData(ImportLocalFilesJob.getTag())
+                .asFlow()
+                .map { list -> list.firstOrNull() }
+        }.collectAsStateWithLifecycle(initialValue = null)
+
+        val bgRunning = backgroundWorkInfo?.state == WorkInfo.State.RUNNING ||
+            backgroundWorkInfo?.state == WorkInfo.State.ENQUEUED
+        val bgFinished = backgroundWorkInfo?.state == WorkInfo.State.SUCCEEDED ||
+            backgroundWorkInfo?.state == WorkInfo.State.FAILED
+        val bgCurrent = backgroundWorkInfo?.progress?.getInt(ImportLocalFilesJob.KEY_PROGRESS_CURRENT, 0) ?: 0
+        val bgTotal = backgroundWorkInfo?.progress?.getInt(ImportLocalFilesJob.KEY_PROGRESS_TOTAL, 0) ?: 0
+        val bgTitle = backgroundWorkInfo?.progress?.getString(ImportLocalFilesJob.KEY_PROGRESS_TITLE) ?: ""
+        val bgImported = backgroundWorkInfo?.outputData?.getInt(ImportLocalFilesJob.KEY_IMPORTED, 0) ?: 0
 
         fun exitImportScreen() {
             if (closeActivityOnDone) {
@@ -220,10 +248,10 @@ class ImportEpubScreen(
 
             if (allFiles.isNotEmpty()) {
                 snackbarHostState.showSnackbar(
-                    "Loaded ${allFiles.size} EPUB file(s) into ${volumeGroups.size} novel group(s)",
+                    "Loaded ${allFiles.size} file(s) into ${volumeGroups.size} novel group(s)",
                 )
             } else if (parsed.errors.isEmpty()) {
-                snackbarHostState.showSnackbar("No valid EPUB files were parsed")
+                snackbarHostState.showSnackbar("No valid book files were parsed")
             }
         }
 
@@ -254,6 +282,25 @@ class ImportEpubScreen(
                 isParsing = false
                 when {
                     epubUris.isEmpty() -> snackbarHostState.showSnackbar("No supported book files found in the selected folder (epub, txt, mobi, azw, pdf)")
+                    epubUris.size > BACKGROUND_IMPORT_THRESHOLD -> {
+                        // Persist tree access so the background job can re-walk the folder later.
+                        runCatching {
+                            context.contentResolver.takePersistableUriPermission(
+                                treeUri,
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                            )
+                        }
+                        ImportLocalFilesJob.start(
+                            context = context,
+                            treeUri = treeUri,
+                            categoryId = if (autoAddToLibrary) selectedCategoryId else null,
+                            autoAddToLibrary = autoAddToLibrary,
+                        )
+                        startedBackgroundImport = true
+                        snackbarHostState.showSnackbar(
+                            "Importing ${epubUris.size} files in the background — you can leave this screen.",
+                        )
+                    }
                     epubUris.size > BATCH_IMPORT_THRESHOLD -> pendingBatchUris = epubUris
                     else -> parseAndIngest(epubUris)
                 }
@@ -361,10 +408,10 @@ class ImportEpubScreen(
         if (pendingBatchUris.isNotEmpty() && importProgress == null && importResult == null) {
             AlertDialog(
                 onDismissRequest = { pendingBatchUris = emptyList() },
-                title = { Text("Import ${pendingBatchUris.size} EPUBs?") },
+                title = { Text("Import ${pendingBatchUris.size} files?") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Found ${pendingBatchUris.size} EPUB files. Each will be imported as its own novel using metadata from the file.")
+                        Text("Found ${pendingBatchUris.size} book files. Each will be imported as its own novel using metadata from the file.")
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
@@ -440,6 +487,7 @@ class ImportEpubScreen(
                                             description = previewFile.description,
                                             coverUri = previewFile.coverUri,
                                             genres = previewFile.genres,
+                                            series = previewFile.collection,
                                         )
                                         try {
                                             val result = importEpub.execute(
@@ -534,7 +582,7 @@ class ImportEpubScreen(
                                             expandedTocByVolume.clear()
                                             scope.launch {
                                                 snackbarHostState.showSnackbar(
-                                                    "Auto-organized groups and volume titles from EPUB metadata",
+                                                    "Auto-organized groups and volume titles from file metadata",
                                                 )
                                             }
                                         },
@@ -549,6 +597,19 @@ class ImportEpubScreen(
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         ) { paddingValues ->
             when {
+                bgRunning || (startedBackgroundImport && bgFinished) -> {
+                    BackgroundImportContent(
+                        isRunning = bgRunning,
+                        current = bgCurrent,
+                        total = bgTotal,
+                        currentTitle = bgTitle,
+                        imported = bgImported,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(paddingValues),
+                        onDone = { exitImportScreen() },
+                    )
+                }
                 importResult != null -> {
                     ImportResultContent(
                         result = importResult!!,
@@ -565,7 +626,7 @@ class ImportEpubScreen(
                     if (showDeleteImportedConfirm) {
                         AlertDialog(
                             onDismissRequest = { showDeleteImportedConfirm = false },
-                            title = { Text("Delete imported EPUB files?") },
+                            title = { Text("Delete imported files?") },
                             text = {
                                 @Suppress("ktlint:standard:max-line-length")
                                 Text(
@@ -592,12 +653,12 @@ class ImportEpubScreen(
                                             when {
                                                 deletedCount == 0 -> {
                                                     snackbarHostState.showSnackbar(
-                                                        "No imported EPUB files were deleted",
+                                                        "No imported files were deleted",
                                                     )
                                                 }
                                                 failedCount == 0 -> {
                                                     snackbarHostState.showSnackbar(
-                                                        "Deleted $deletedCount imported EPUB file(s)",
+                                                        "Deleted $deletedCount imported file(s)",
                                                     )
                                                 }
                                                 else -> {
@@ -678,7 +739,7 @@ class ImportEpubScreen(
                             scope.launch {
                                 val groupsToImport = volumeGroups.filter { it.volumes.isNotEmpty() }
                                 if (groupsToImport.isEmpty()) {
-                                    snackbarHostState.showSnackbar("Select at least one EPUB file")
+                                    snackbarHostState.showSnackbar("Select at least one file")
                                     return@launch
                                 }
 
@@ -708,6 +769,7 @@ class ImportEpubScreen(
                                             description = volume.file.description,
                                             coverUri = volume.file.coverUri,
                                             genres = volume.file.genres,
+                                            series = volume.file.collection,
                                         )
                                     }
 
@@ -839,7 +901,7 @@ private fun ImportSelectionContent(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text("Parsing EPUB files...")
+                    Text("Parsing files...")
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
             }
@@ -1301,6 +1363,61 @@ private fun buildTocPreviewSections(totalChapters: Int): List<TocSection> {
 }
 
 @Composable
+private fun BackgroundImportContent(
+    isRunning: Boolean,
+    current: Int,
+    total: Int,
+    currentTitle: String,
+    imported: Int,
+    modifier: Modifier,
+    onDone: () -> Unit,
+) {
+    Column(
+        modifier = modifier.padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        if (isRunning) {
+            Text(
+                text = "Importing in background",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                text = "You can leave this screen — the import keeps running and progress shows in your notifications.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            LinearProgressIndicator(
+                progress = { if (total > 0) current.toFloat() / total else 0f },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                text = if (total > 0) "$current / $total — $currentTitle" else "Scanning folder…",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
+                Text("Go to library")
+            }
+        } else {
+            Text(
+                text = "Import complete",
+                style = MaterialTheme.typography.headlineSmall,
+            )
+            Text(
+                text = "✓ Imported $imported novel${if (imported != 1) "s" else ""}",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(MR.strings.action_close))
+            }
+        }
+    }
+}
+
+@Composable
 private fun ImportProgressContent(
     progress: ImportProgress,
     modifier: Modifier = Modifier,
@@ -1389,7 +1506,7 @@ private fun ImportResultContent(
                     onClick = onDeleteImportedFiles,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Delete imported EPUB files")
+                    Text("Delete imported files")
                 }
             }
 

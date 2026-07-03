@@ -68,18 +68,19 @@ class ParseEpubPreview {
                             return@runCatching null
                         }
                         if (ext != "epub") {
-                            // txt / mobi / pdf — return filename-based metadata; no deep parse needed
+                            // txt / mobi / azw / pdf — extract embedded metadata offline (no network).
                             inputStream.close()
+                            val meta = LocalFileMetadata.extract(context, uri, fileName)
                             return@runCatching PreviewFile(
                                 uri = uri,
                                 fileName = fileName,
-                                title = fileName.substringBeforeLast('.').trim(),
-                                author = null,
-                                description = null,
+                                title = meta.title,
+                                author = meta.author,
+                                description = meta.description,
                                 coverUri = null,
-                                collection = null,
+                                collection = meta.series,
                                 collectionPosition = null,
-                                genres = null,
+                                genres = meta.genres,
                                 tableOfContents = emptyList(),
                             )
                         }

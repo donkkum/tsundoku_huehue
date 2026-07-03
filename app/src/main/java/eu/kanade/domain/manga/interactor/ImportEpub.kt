@@ -43,6 +43,8 @@ class ImportEpub(
         val description: String?,
         val coverUri: Uri?,
         val genres: String?,
+        /** Series/collection name; persisted as a tag so it's visible & filterable. */
+        val series: String? = null,
     )
 
     data class Result(
@@ -120,6 +122,9 @@ class ImportEpub(
                     val combinedDescription = buildCombinedDescription(files)
                     val combinedGenres = mergeGenres(files)
                     val combinedAuthor = mergeAuthors(files)
+                    val combinedSeries = files.firstNotNullOfOrNull {
+                        it.series?.trim()?.takeIf(String::isNotBlank)
+                    }
 
                     writeDetailsJson(
                         novelDir = novelDir,
@@ -127,6 +132,7 @@ class ImportEpub(
                         author = combinedAuthor,
                         description = combinedDescription,
                         genres = combinedGenres,
+                        series = combinedSeries,
                     )
 
                     if (copiedCount > 0) {
@@ -184,6 +190,7 @@ class ImportEpub(
                                 author = file.author,
                                 description = file.description,
                                 genres = genres,
+                                series = file.series,
                             )
 
                             successCount++
@@ -352,8 +359,17 @@ class ImportEpub(
         author: String?,
         description: String?,
         genres: List<String>,
+        series: String? = null,
     ) {
-        if (author.isNullOrBlank() && description.isNullOrBlank() && genres.isEmpty()) return
+        // Series is stored as a leading tag so it surfaces in the library and is filterable
+        // (the novel data model has no dedicated series field).
+        val genresWithSeries = if (!series.isNullOrBlank() && genres.none { it.equals(series, ignoreCase = true) }) {
+            listOf(series) + genres
+        } else {
+            genres
+        }
+
+        if (author.isNullOrBlank() && description.isNullOrBlank() && genresWithSeries.isEmpty()) return
 
         val detailsFile = novelDir.createFile("details.json") ?: return
         val payload = buildString {
@@ -363,8 +379,8 @@ class ImportEpub(
             if (!description.isNullOrBlank()) {
                 append(",\"description\":\"${description.replace("\"", "\\\"").replace("\n", "\\n")}\"")
             }
-            if (genres.isNotEmpty()) {
-                append(",\"genre\":[${genres.joinToString(",") { "\"${it.replace("\"", "\\\"")}\"" }}]")
+            if (genresWithSeries.isNotEmpty()) {
+                append(",\"genre\":[${genresWithSeries.joinToString(",") { "\"${it.replace("\"", "\\\"")}\"" }}]")
             }
             append("}")
         }
