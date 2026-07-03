@@ -51,13 +51,15 @@ class RestoreFromDownloads(
         private const val LOCAL_NOVEL_SOURCE_ID = 1L
         private val HTML_EXTENSIONS = setOf("html", "htm", "xhtml")
         private val TEXT_EXTENSIONS = setOf("txt", "text")
-        private val CONTENT_EXTENSIONS = HTML_EXTENSIONS + TEXT_EXTENSIONS
+        private val EBOOK_EXTENSIONS = setOf("azw", "azw3", "mobi", "pdf")
+        private val CONTENT_EXTENSIONS = HTML_EXTENSIONS + TEXT_EXTENSIONS + EBOOK_EXTENSIONS
         // Max novels processed in parallel — file I/O + DB bound
         private const val CONCURRENCY = 6
     }
 
     data class NovelCandidate(
         val title: String,
+        // Pairs of (chapterName, chapterDir/file) — UniFile refs kept minimal
         val chapters: List<ChapterCandidate>,
     )
 
@@ -91,75 +93,34 @@ class RestoreFromDownloads(
         val source = sourceManager.get(LOCAL_NOVEL_SOURCE_ID)
             ?: return@withContext Result(0, 0, listOf("Local novel source not found"))
 
-        val novels = discoverNovels(root)
+        // Stream novels one top-level dir at a time — never hold all UniFile refs in memory
+        val topLevel = root.listFiles().orEmpty().filter { it.isDirectory }
         val errors = java.util.Collections.synchronizedList(mutableListOf<String>())
         val restored = AtomicInteger(0)
         val skipped = AtomicInteger(0)
         val semaphore = Semaphore(CONCURRENCY)
+
+        // Count total novels up front for progress (cheap — just counts dirs, no recursion)
+        val total = countNovels(root)
         val counter = AtomicInteger(0)
 
         coroutineScope {
-            novels.map { novel ->
+            topLevel.map { topDir ->
                 async {
                     semaphore.withPermit {
-                        val idx = counter.incrementAndGet()
-                        onProgress(idx, novels.size, novel.title)
-
-                        if (novel.chapters.isEmpty()) {
-                            skipped.incrementAndGet()
-                            return@withPermit
-                        }
-
-                        try {
-                            val sanitized = sanitize(novel.title)
-
-                            // Skip if already in library
-                            val existing = getMangaByUrlAndSourceId.await(sanitized, LOCAL_NOVEL_SOURCE_ID)
-                            if (existing?.favorite == true) {
-                                skipped.incrementAndGet()
-                                return@withPermit
-                            }
-
-                            val novelDir = localNovelsDir.findFile(sanitized)
-                                ?: localNovelsDir.createDirectory(sanitized)
-                            if (novelDir == null) {
-                                errors.add("${novel.title}: could not create directory")
-                                return@withPermit
-                            }
-
-                            novel.chapters.forEach { chapter ->
-                                val chapterFileName = "${sanitize(chapter.name)}.html"
-                                if (novelDir.findFile(chapterFileName) != null) return@forEach
-
-                                val destFile = novelDir.createFile(chapterFileName) ?: return@forEach
-                                streamChapterFiles(context, chapter.files, destFile)
-                            }
-
-                            // Register in DB
-                            val manga = existing ?: run {
-                                val placeholder = eu.kanade.tachiyomi.source.model.SManga.create().apply {
-                                    title = novel.title
-                                    url = sanitized
-                                }
-                                networkToLocalManga(placeholder.toDomainManga(LOCAL_NOVEL_SOURCE_ID, isNovel = true))
-                            }
-
-                            mangaRepository.update(MangaUpdate(id = manga.id, favorite = true, dateAdded = System.currentTimeMillis(), isNovel = true))
-
-                            val networkManga = source.getMangaDetails(manga.toSManga())
-                            updateManga.awaitUpdateFromSource(manga, networkManga, manualFetch = true)
-
-                            val chapters = source.getChapterList(manga.toSManga())
-                            syncChaptersWithSource.await(chapters, manga, source, manualFetch = true)
-
-                            if (categoryId != null && categoryId != 0L) {
-                                setMangaCategories.await(manga.id, listOf(categoryId))
-                            }
-
-                            restored.incrementAndGet()
-                        } catch (e: Exception) {
-                            errors.add("${novel.title}: ${e.message}")
-                        }
+                        processTopDir(
+                            context = context,
+                            topDir = topDir,
+                            localNovelsDir = localNovelsDir,
+                            source = source,
+                            categoryId = categoryId,
+                            total = total,
+                            counter = counter,
+                            restored = restored,
+                            skipped = skipped,
+                            errors = errors,
+                            onProgress = onProgress,
+                        )
                     }
                 }
             }.awaitAll()
@@ -170,70 +131,204 @@ class RestoreFromDownloads(
         Result(restored = restored.get(), skipped = skipped.get(), errors = errors)
     }
 
-    // ── Discovery ────────────────────────────────────────────────────────────
+    private suspend fun processTopDir(
+        context: Context,
+        topDir: UniFile,
+        localNovelsDir: UniFile,
+        source: eu.kanade.tachiyomi.source.Source,
+        categoryId: Long?,
+        total: Int,
+        counter: AtomicInteger,
+        restored: AtomicInteger,
+        skipped: AtomicInteger,
+        errors: MutableList<String>,
+        onProgress: (Int, Int, String) -> Unit,
+    ) {
+        val topChildren = topDir.listFiles().orEmpty()
+        val chapterDirs = topChildren.filter { it.isDirectory && hasContentFiles(it) }
+        val directContent = topChildren.filter { it.isFile && isContentFile(it) }
 
-    private fun discoverNovels(root: UniFile): List<NovelCandidate> {
-        val topLevel = root.listFiles().orEmpty().filter { it.isDirectory }
-        if (topLevel.isEmpty()) return emptyList()
+        when {
+            chapterDirs.isNotEmpty() -> {
+                // topDir is a novel, children are chapter dirs
+                val idx = counter.incrementAndGet()
+                onProgress(idx, total, topDir.name.orEmpty())
+                val chapters = chapterDirs.map { chDir ->
+                    ChapterCandidate(name = chDir.name.orEmpty(), files = contentFilesIn(chDir))
+                }.sortedBy { it.name }
+                restoreNovel(
+                    context, NovelCandidate(topDir.name.orEmpty(), chapters),
+                    localNovelsDir, source, categoryId, restored, skipped, errors,
+                )
+            }
+            directContent.isNotEmpty() -> {
+                // topDir is a novel, content files are the chapters
+                val idx = counter.incrementAndGet()
+                onProgress(idx, total, topDir.name.orEmpty())
+                val chapters = directContent.map { f ->
+                    ChapterCandidate(name = f.nameWithoutExtension.orEmpty(), files = listOf(f))
+                }.sortedBy { it.name }
+                restoreNovel(
+                    context, NovelCandidate(topDir.name.orEmpty(), chapters),
+                    localNovelsDir, source, categoryId, restored, skipped, errors,
+                )
+            }
+            else -> {
+                // topDir might be a source folder — go one level deeper
+                topChildren.filter { it.isDirectory }.forEach { novelDir ->
+                    val novelChildren = novelDir.listFiles().orEmpty()
+                    val novelChapterDirs = novelChildren.filter { it.isDirectory && hasContentFiles(it) }
+                    val novelDirectContent = novelChildren.filter { it.isFile && isContentFile(it) }
 
-        val novels = mutableListOf<NovelCandidate>()
+                    val idx = counter.incrementAndGet()
+                    onProgress(idx, total, novelDir.name.orEmpty())
 
-        topLevel.forEach { topDir ->
-            val topChildren = topDir.listFiles().orEmpty()
-
-            // Check if topDir itself is a novel (its children are chapter dirs or html files)
-            val chapterDirs = topChildren.filter { it.isDirectory && hasContentFiles(it) }
-            val directHtml = topChildren.filter { it.isFile && isContentFile(it) }
-
-            when {
-                chapterDirs.isNotEmpty() -> {
-                    // topDir = novel title, children = chapter dirs
-                    val chapters = chapterDirs.map { chDir ->
-                        ChapterCandidate(
-                            name = chDir.name.orEmpty(),
-                            files = contentFilesIn(chDir),
-                        )
-                    }.sortedBy { it.name }
-                    novels.add(NovelCandidate(title = topDir.name.orEmpty(), chapters = chapters))
-                }
-                directHtml.isNotEmpty() -> {
-                    // topDir = novel, html files are the chapters themselves
-                    val chapters = directHtml.map { f ->
-                        ChapterCandidate(name = f.nameWithoutExtension.orEmpty(), files = listOf(f))
-                    }.sortedBy { it.name }
-                    novels.add(NovelCandidate(title = topDir.name.orEmpty(), chapters = chapters))
-                }
-                else -> {
-                    // topDir might be a source folder — go one level deeper
-                    topChildren.filter { it.isDirectory }.forEach { novelDir ->
-                        val novelChildren = novelDir.listFiles().orEmpty()
-                        val novelChapterDirs = novelChildren.filter { it.isDirectory && hasContentFiles(it) }
-                        val novelDirectHtml = novelChildren.filter { it.isFile && isContentFile(it) }
-
-                        when {
-                            novelChapterDirs.isNotEmpty() -> {
-                                val chapters = novelChapterDirs.map { chDir ->
-                                    ChapterCandidate(name = chDir.name.orEmpty(), files = contentFilesIn(chDir))
-                                }.sortedBy { it.name }
-                                novels.add(NovelCandidate(title = novelDir.name.orEmpty(), chapters = chapters))
-                            }
-                            novelDirectHtml.isNotEmpty() -> {
-                                val chapters = novelDirectHtml.map { f ->
-                                    ChapterCandidate(name = f.nameWithoutExtension.orEmpty(), files = listOf(f))
-                                }.sortedBy { it.name }
-                                novels.add(NovelCandidate(title = novelDir.name.orEmpty(), chapters = chapters))
-                            }
+                    when {
+                        novelChapterDirs.isNotEmpty() -> {
+                            val chapters = novelChapterDirs.map { chDir ->
+                                ChapterCandidate(name = chDir.name.orEmpty(), files = contentFilesIn(chDir))
+                            }.sortedBy { it.name }
+                            restoreNovel(
+                                context, NovelCandidate(novelDir.name.orEmpty(), chapters),
+                                localNovelsDir, source, categoryId, restored, skipped, errors,
+                            )
                         }
+                        novelDirectContent.isNotEmpty() -> {
+                            val chapters = novelDirectContent.map { f ->
+                                ChapterCandidate(name = f.nameWithoutExtension.orEmpty(), files = listOf(f))
+                            }.sortedBy { it.name }
+                            restoreNovel(
+                                context, NovelCandidate(novelDir.name.orEmpty(), chapters),
+                                localNovelsDir, source, categoryId, restored, skipped, errors,
+                            )
+                        }
+                        else -> skipped.incrementAndGet()
                     }
                 }
             }
         }
+    }
 
+    private suspend fun restoreNovel(
+        context: Context,
+        novel: NovelCandidate,
+        localNovelsDir: UniFile,
+        source: eu.kanade.tachiyomi.source.Source,
+        categoryId: Long?,
+        restored: AtomicInteger,
+        skipped: AtomicInteger,
+        errors: MutableList<String>,
+    ) {
+        if (novel.chapters.isEmpty()) {
+            skipped.incrementAndGet()
+            return
+        }
+        try {
+            val sanitized = sanitize(novel.title)
+
+            // Skip if already in library
+            val existing = getMangaByUrlAndSourceId.await(sanitized, LOCAL_NOVEL_SOURCE_ID)
+            if (existing?.favorite == true) {
+                skipped.incrementAndGet()
+                return
+            }
+
+            val novelDir = localNovelsDir.findFile(sanitized)
+                ?: localNovelsDir.createDirectory(sanitized)
+            if (novelDir == null) {
+                errors.add("${novel.title}: could not create directory")
+                return
+            }
+
+            novel.chapters.forEach { chapter ->
+                val chapterFileName = "${sanitize(chapter.name)}.html"
+                if (novelDir.findFile(chapterFileName) != null) return@forEach
+                val destFile = novelDir.createFile(chapterFileName) ?: return@forEach
+                streamChapterFiles(context, chapter.files, destFile)
+            }
+
+            val manga = existing ?: run {
+                val placeholder = eu.kanade.tachiyomi.source.model.SManga.create().apply {
+                    title = novel.title
+                    url = sanitized
+                }
+                networkToLocalManga(placeholder.toDomainManga(LOCAL_NOVEL_SOURCE_ID, isNovel = true))
+            }
+
+            mangaRepository.update(MangaUpdate(id = manga.id, favorite = true, dateAdded = System.currentTimeMillis(), isNovel = true))
+
+            val networkManga = source.getMangaDetails(manga.toSManga())
+            updateManga.awaitUpdateFromSource(manga, networkManga, manualFetch = true)
+
+            val chapters = source.getChapterList(manga.toSManga())
+            syncChaptersWithSource.await(chapters, manga, source, manualFetch = true)
+
+            if (categoryId != null && categoryId != 0L) {
+                setMangaCategories.await(manga.id, listOf(categoryId))
+            }
+
+            restored.incrementAndGet()
+        } catch (e: Exception) {
+            errors.add("${novel.title}: ${e.message}")
+        }
+    }
+
+    // ── Discovery (used by scan() preview only) ──────────────────────────────
+
+    private fun discoverNovels(root: UniFile): List<NovelCandidate> {
+        val novels = mutableListOf<NovelCandidate>()
+        root.listFiles().orEmpty().filter { it.isDirectory }.forEach { topDir ->
+            val topChildren = topDir.listFiles().orEmpty()
+            val chapterDirs = topChildren.filter { it.isDirectory && hasContentFiles(it) }
+            val directContent = topChildren.filter { it.isFile && isContentFile(it) }
+            when {
+                chapterDirs.isNotEmpty() -> novels.add(
+                    NovelCandidate(topDir.name.orEmpty(), chapterDirs.map {
+                        ChapterCandidate(it.name.orEmpty(), contentFilesIn(it))
+                    }.sortedBy { it.name }),
+                )
+                directContent.isNotEmpty() -> novels.add(
+                    NovelCandidate(topDir.name.orEmpty(), directContent.map {
+                        ChapterCandidate(it.nameWithoutExtension.orEmpty(), listOf(it))
+                    }.sortedBy { it.name }),
+                )
+                else -> topChildren.filter { it.isDirectory }.forEach { novelDir ->
+                    val nc = novelDir.listFiles().orEmpty()
+                    val ncd = nc.filter { it.isDirectory && hasContentFiles(it) }
+                    val ndf = nc.filter { it.isFile && isContentFile(it) }
+                    when {
+                        ncd.isNotEmpty() -> novels.add(NovelCandidate(novelDir.name.orEmpty(), ncd.map {
+                            ChapterCandidate(it.name.orEmpty(), contentFilesIn(it))
+                        }.sortedBy { it.name }))
+                        ndf.isNotEmpty() -> novels.add(NovelCandidate(novelDir.name.orEmpty(), ndf.map {
+                            ChapterCandidate(it.nameWithoutExtension.orEmpty(), listOf(it))
+                        }.sortedBy { it.name }))
+                    }
+                }
+            }
+        }
         return novels.distinctBy { it.title }
     }
 
-    private fun hasContentFiles(dir: UniFile): Boolean =
-        dir.listFiles().orEmpty().any { it.isFile && isContentFile(it) }
+    /** Quick novel count without materializing chapter/file lists — for progress denominator. */
+    private fun countNovels(root: UniFile): Int {
+        var count = 0
+        root.listFiles().orEmpty().filter { it.isDirectory }.forEach { topDir ->
+            val topChildren = topDir.listFiles().orEmpty()
+            val hasChapterDirs = topChildren.any { it.isDirectory && hasContentFiles(it) }
+            val hasDirectContent = topChildren.any { it.isFile && isContentFile(it) }
+            when {
+                hasChapterDirs || hasDirectContent -> count++
+                else -> count += topChildren.count { it.isDirectory }
+            }
+        }
+        return count
+    }
+
+    private fun hasContentFiles(dir: UniFile): Boolean {
+        // listFiles() once, reuse result — caller must not call contentFilesIn() on same dir
+        return dir.listFiles().orEmpty().any { it.isFile && isContentFile(it) }
+    }
 
     private fun isContentFile(file: UniFile): Boolean {
         val ext = file.name?.substringAfterLast('.', "")?.lowercase() ?: return false
