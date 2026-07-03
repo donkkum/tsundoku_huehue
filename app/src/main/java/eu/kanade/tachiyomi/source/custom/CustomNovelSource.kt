@@ -913,10 +913,35 @@ class CustomNovelSource(
         val pageUrl = buildAbsoluteUrl(page.url)
         val selectors = config.selectors.content
 
+        // Base64-in-JS-variable mode: some sites ship the chapter HTML as a base64 string in a
+        // script var and populate the DOM client-side, so the CSS target is empty for scrapers.
+        val varName = selectors.base64Var
+        if (!varName.isNullOrBlank()) {
+            val body = client.newCall(GET(pageUrl, headers)).awaitSuccess().body.string()
+            decodeBase64Var(body, varName)?.let { return it }
+            // else fall through to CSS selectors below
+        }
+
         // Guard against empty selector (Jsoup throws on empty string)
         if (selectors.primary.isBlank()) return ""
 
         return fetchContentHtml(pageUrl, selectors) ?: ""
+    }
+
+    // Extracts `var <name> = '<base64>'` (single or double quoted) from raw HTML and decodes the
+    // payload as UTF-8. Returns null when the variable isn't present or doesn't decode.
+    private fun decodeBase64Var(html: String, varName: String): String? {
+        val regex = Regex(
+            """var\s+${Regex.escape(varName)}\s*=\s*(['"])(.*?)\1""",
+            RegexOption.DOT_MATCHES_ALL,
+        )
+        val raw = regex.find(html)?.groupValues?.getOrNull(2)?.ifBlank { null } ?: return null
+        return try {
+            String(android.util.Base64.decode(raw, android.util.Base64.DEFAULT), Charsets.UTF_8)
+                .ifBlank { null }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private suspend fun fetchContentHtml(url: String, selectors: ContentSelectors): String? {
@@ -1271,6 +1296,9 @@ data class CustomSourceConfig(
     val statusMapping: Map<String, String>? = null,
     // Novel URL the wizard's reading test opens directly, so it works without a working listing.
     val sampleNovelUrl: String? = null,
+    // When true, the app periodically follows redirects from baseUrl and persists a rotated domain
+    // (for sites that change domains). Manual base-URL editing remains the fallback.
+    val autoUpdateDomain: Boolean = false,
 )
 
 @Serializable
@@ -1335,6 +1363,11 @@ data class ContentSelectors(
     // When true (default), strip common boilerplate (scripts, ads, share widgets,
     // next/prev chapter links, empty nodes) in addition to removeSelectors.
     val removeBoilerplate: Boolean = true,
+    // Some sites deliver chapter HTML as a base64 string in a JS variable (e.g.
+    // `var mana_img = '...'`) that the page decodes client-side, leaving the CSS target empty for
+    // scrapers. When set to that variable name, the raw page is scanned for `var <name> = '...'` and
+    // the base64 payload is decoded (UTF-8) as the chapter content. Falls back to [primary] if absent.
+    val base64Var: String? = null,
 )
 
 // Templates removed — use extension repos for pre-built novel source themes

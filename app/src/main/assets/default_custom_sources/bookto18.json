@@ -1,0 +1,42 @@
+{
+  "name": "북토끼 (Bookto)",
+  "baseUrl": "https://bookto18.com",
+  "language": "ko",
+  "isNovel": true,
+  "autoUpdateDomain": true,
+  "reverseChapters": true,
+  "popularUrl": "{baseUrl}/bbs/board.php?bo_table=novel&page={page}",
+  "searchUrl": "{baseUrl}/bbs/search.php?skin_group=book&sfl=wr_subject&sop=and&stx={query}&page={page}",
+  "selectors": {
+    "popular": {
+      "list": "div.img-item",
+      "link": "a",
+      "title": ".in-lable",
+      "cover": "img"
+    },
+    "search": {
+      "list": "div.img-item",
+      "link": "a",
+      "title": ".in-lable",
+      "cover": "img"
+    },
+    "details": {
+      "title": "h1",
+      "description": ".view-content .row .col-sm-8",
+      "cover": ".view-img img"
+    },
+    "chapters": {
+      "list": "li.list-item",
+      "link": "a.item-subject",
+      "name": "a.item-subject",
+      "date": ".wr-date",
+      "pagedUrlPattern": "{novelUrl}&spage={page}"
+    },
+    "content": {
+      "primary": "#mana_img",
+      "fallbacks": [".book-text-viewer", ".view-content.book-text-viewer"],
+      "removeBoilerplate": true,
+      "base64Var": "mana_img"
+    }
+  }
+}

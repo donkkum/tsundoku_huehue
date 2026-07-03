@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.source.custom
 
 import android.content.Context
+import eu.kanade.domain.source.service.SourcePreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,6 +14,8 @@ import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.novel.TDMR
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.io.File
 
 /**
@@ -38,7 +41,52 @@ class CustomSourceManager(
     private val mutationLock = Any()
 
     init {
+        seedDefaultSources()
         loadAllSources()
+    }
+
+    /**
+     * Seeds bundled default custom sources (shipped in assets/[DEFAULTS_ASSET_DIR]) on first run.
+     * Each default is seeded at most once — tracked by a per-id flag — so a source the user later
+     * deletes does not reappear. Existing user configs with the same id are never overwritten.
+     */
+    private fun seedDefaultSources() {
+        try {
+            val assetNames = context.assets.list(DEFAULTS_ASSET_DIR)
+                ?.filter { it.endsWith(".json") }
+                ?: return
+            val prefs = context.getSharedPreferences("custom_source_seed", Context.MODE_PRIVATE)
+            val languagesToEnable = mutableSetOf<String>()
+            for (assetName in assetNames) {
+                val raw = context.assets.open("$DEFAULTS_ASSET_DIR/$assetName")
+                    .bufferedReader().use { it.readText() }
+                val config = try {
+                    json.decodeFromString<CustomSourceConfig>(raw).withStableId()
+                } catch (e: Exception) {
+                    logcat(LogPriority.ERROR, e) { "Bad default custom source asset: $assetName" }
+                    continue
+                }
+                // Bump SEED_VERSION when the bundled config changes so the updated definition
+                // overwrites the stale on-device copy exactly once per version.
+                val key = "seeded_v${SEED_VERSION}_${config.id}"
+                if (prefs.getBoolean(key, false)) continue
+                val target = File(customSourcesDir, "${config.id}.json")
+                target.writeText(json.encodeToString(config))
+                logcat(LogPriority.INFO) { "Seeded/updated default custom source: ${config.name}" }
+                // Enable the source's language so it isn't hidden by the language filter.
+                languagesToEnable += config.language
+                prefs.edit().putBoolean(key, true).apply()
+            }
+            // Make seeded sources visible: their language would otherwise be filtered out of the
+            // sources list. Only done on first seed, so the user can still disable it afterwards.
+            if (languagesToEnable.isNotEmpty()) {
+                val sourcePreferences = Injekt.get<SourcePreferences>()
+                val current = sourcePreferences.enabledLanguages.get()
+                sourcePreferences.enabledLanguages.set(current + languagesToEnable)
+            }
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e) { "Failed to seed default custom sources" }
+        }
     }
 
     /**
@@ -596,6 +644,12 @@ enum class SourceTestSection { POPULAR, LATEST, SEARCH, READING, ALL }
 // Fallback search test query when the source has no testSearchQuery. Language-neutral; non-Latin
 // sites should set testSearchQuery (the wizard fills it from the search probe word).
 internal const val DEFAULT_TEST_QUERY = "a"
+
+// Assets subfolder holding bundled default custom-source configs seeded on first run.
+private const val DEFAULTS_ASSET_DIR = "default_custom_sources"
+
+// Bump when a bundled default config changes so it re-seeds (overwrites) on the next launch.
+private const val SEED_VERSION = 4
 
 /** Turns a JSON decode failure into a readable, field-aware message for the import dialog. */
 internal fun customSourceFriendlyParseError(e: Throwable): String {
