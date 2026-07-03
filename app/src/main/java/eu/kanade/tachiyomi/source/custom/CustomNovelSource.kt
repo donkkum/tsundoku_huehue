@@ -479,6 +479,15 @@ class CustomNovelSource(
 
     override val client = network.cloudflareClient
 
+    // Domain auto-update is triggered lazily when this source is actually used (not at startup).
+    private val customSourceManager by lazy { Injekt.get<CustomSourceManager>() }
+
+    private fun triggerDomainCheck() {
+        if (config.autoUpdateDomain && config.basedOnSourceId == null) {
+            runCatching { customSourceManager.onSourceAccessed(this) }
+        }
+    }
+
     /**
      * When basedOnSourceId is set, we delegate all fetching/parsing to the base
      * extension source but substitute our own baseUrl in requests.
@@ -535,6 +544,7 @@ class CustomNovelSource(
     // (protected request/parse methods aren't accessible on external instances)
 
     override suspend fun getPopularManga(page: Int): MangasPage {
+        triggerDomainCheck()
         baseSource?.let { source ->
             return rebaseMangasPage(source.getPopularManga(page))
         }
@@ -542,6 +552,7 @@ class CustomNovelSource(
     }
 
     override suspend fun getLatestUpdates(page: Int): MangasPage {
+        triggerDomainCheck()
         baseSource?.let { source ->
             return rebaseMangasPage(source.getLatestUpdates(page))
         }
@@ -549,6 +560,7 @@ class CustomNovelSource(
     }
 
     override suspend fun getSearchManga(page: Int, query: String, filters: FilterList): MangasPage {
+        triggerDomainCheck()
         baseSource?.let { source ->
             return rebaseMangasPage(source.getSearchManga(page, query, filters))
         }
@@ -556,6 +568,7 @@ class CustomNovelSource(
     }
 
     override suspend fun getMangaDetails(manga: SManga): SManga {
+        triggerDomainCheck()
         baseSource?.let { source ->
             return rebaseManga(source.getMangaDetails(toBaseSourceManga(manga)))
         }
@@ -888,6 +901,7 @@ class CustomNovelSource(
     }
 
     override suspend fun fetchPageText(page: Page): String {
+        triggerDomainCheck()
         val bs = baseSource
         if (bs != null && bs.isNovelSource()) {
             // For content fetching, we need absolute URLs (not relative paths)

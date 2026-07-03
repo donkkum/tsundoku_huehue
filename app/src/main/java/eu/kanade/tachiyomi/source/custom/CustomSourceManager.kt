@@ -47,31 +47,35 @@ class CustomSourceManager(
     private val mutationLock = Any()
 
     private val domainScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val domainChecksInFlight = java.util.Collections.synchronizedSet(mutableSetOf<Long>())
 
     init {
         seedDefaultSources()
         loadAllSources()
-        scheduleDomainRefresh()
     }
 
     /**
-     * For sources with [CustomSourceConfig.autoUpdateDomain], follows redirects from the stored
-     * base URL once per [DOMAIN_CHECK_INTERVAL_MS]; if the site has moved (final host differs), the
-     * new domain is persisted (source id preserved, so library links survive). A dead old domain
-     * throws and is skipped — the base-URL editor remains the manual fallback.
+     * Called when a custom source is actually used (browse/search/details/read). For sources with
+     * [CustomSourceConfig.autoUpdateDomain] it kicks off a throttled (once per
+     * [DOMAIN_CHECK_INTERVAL_MS]), non-blocking redirect check: if the site has moved (final host
+     * differs) the new domain is persisted, keeping the source id so library links survive. A dead
+     * old domain throws and is skipped — the base-URL editor remains the manual fallback. This runs
+     * only on demand (not at startup) so idle sources never hit the network.
      */
-    private fun scheduleDomainRefresh() {
+    fun onSourceAccessed(source: CustomNovelSource) {
+        if (!source.config.autoUpdateDomain) return
+        val prefs = context.getSharedPreferences("custom_source_seed", Context.MODE_PRIVATE)
+        val key = "${DOMAIN_CHECK_KEY}_${source.id}"
+        val now = System.currentTimeMillis()
+        if (now - prefs.getLong(key, 0L) < DOMAIN_CHECK_INTERVAL_MS) return
+        if (!domainChecksInFlight.add(source.id)) return
         domainScope.launch {
             try {
-                val prefs = context.getSharedPreferences("custom_source_seed", Context.MODE_PRIVATE)
-                val now = System.currentTimeMillis()
-                if (now - prefs.getLong(DOMAIN_CHECK_KEY, 0L) < DOMAIN_CHECK_INTERVAL_MS) return@launch
-                val sources = _customSources.value.filter { it.config.autoUpdateDomain }
-                if (sources.isEmpty()) return@launch
-                sources.forEach { runCatching { refreshDomain(it) } }
-                prefs.edit().putLong(DOMAIN_CHECK_KEY, now).apply()
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Custom source domain refresh failed" }
+                runCatching { refreshDomain(source) }
+                    .onFailure { logcat(LogPriority.DEBUG, it) { "Domain check failed for ${source.name}" } }
+                prefs.edit().putLong(key, now).apply()
+            } finally {
+                domainChecksInFlight.remove(source.id)
             }
         }
     }
