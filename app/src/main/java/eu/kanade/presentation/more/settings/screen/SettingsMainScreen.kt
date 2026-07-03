@@ -19,7 +19,6 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Sync
-import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TopAppBarDefaults
@@ -223,12 +222,6 @@ object SettingsMainScreen : Screen() {
             subtitleRes = TDMR.strings.pref_novel_download_throttling_summary,
             icon = Icons.Outlined.GetApp,
             screen = SettingsNovelDownloadScreen,
-        ),
-        Item(
-            titleRes = TDMR.strings.pref_category_translation,
-            subtitleRes = TDMR.strings.pref_translation_enabled_summary,
-            icon = Icons.Outlined.Translate,
-            screen = SettingsTranslationScreen,
         ),
         Item(
             titleRes = MR.strings.pref_category_tracking,

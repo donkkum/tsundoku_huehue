@@ -29,8 +29,6 @@ import eu.kanade.tachiyomi.data.epub.EpubExportJob
 import eu.kanade.tachiyomi.data.library.LibraryClearJob
 import eu.kanade.tachiyomi.data.library.LibraryUpdateJob
 import eu.kanade.tachiyomi.data.track.TrackerManager
-import eu.kanade.tachiyomi.data.translation.TranslationJob
-import eu.kanade.tachiyomi.data.translation.TranslationService
 import eu.kanade.tachiyomi.source.isNovelSource
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.HttpSource
@@ -87,7 +85,6 @@ import tachiyomi.domain.source.model.StubSource
 import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.domain.track.interactor.GetTracksPerManga
 import tachiyomi.domain.track.model.Track
-import tachiyomi.domain.translation.repository.TranslatedChapterRepository
 import tachiyomi.i18n.MR
 import tachiyomi.source.local.isLocal
 import tachiyomi.source.local.isLocalNovel
@@ -116,7 +113,6 @@ class LibraryScreenModel(
     private val downloadManager: DownloadManager = Injekt.get(),
     private val downloadCache: DownloadCache = Injekt.get(),
     private val trackerManager: TrackerManager = Injekt.get(),
-    private val translatedChapterRepository: TranslatedChapterRepository = Injekt.get(),
     private val mangaRepository: MangaRepository = Injekt.get(),
     private val type: LibraryType = LibraryType.All,
 ) : StateScreenModel<LibraryScreenModel.State>(State()) {
@@ -943,27 +939,6 @@ class LibraryScreenModel(
     }
 
     /**
-     * Queues all downloaded chapters from the selected novels for translation.
-     * Only processes chapters that haven't been translated yet.
-     */
-    fun translateSelectedNovels() {
-        val translationService: TranslationService = Injekt.get()
-        val mangas = state.value.selectedManga.filter { manga ->
-            manga.isNovel
-        }
-        clearSelection()
-        screenModelScope.launchNonCancellable {
-            mangas.forEach { manga ->
-                val chapters = getChaptersByMangaId.await(manga.id)
-                // Queue all chapters for translation (TranslationService will skip already translated ones)
-                translationService.enqueueAll(manga, chapters)
-            }
-            // Start background worker with notification
-            TranslationJob.start(Injekt.get<android.app.Application>())
-        }
-    }
-
-    /**
      * Show confirmation dialog for marking mangas read/unread.
      */
     fun showMarkReadConfirmation(read: Boolean) {
@@ -1010,7 +985,6 @@ class LibraryScreenModel(
         deleteFromLibrary: Boolean,
         deleteChapters: Boolean,
         clearChaptersFromDb: Boolean = false,
-        deleteTranslations: Boolean = false,
         clearCovers: Boolean = false,
         clearDescriptions: Boolean = false,
         clearTags: Boolean = false,
@@ -1036,13 +1010,6 @@ class LibraryScreenModel(
                 }
             }
 
-            if (deleteTranslations) {
-                mangas.forEach { manga ->
-                    val chapters = getChaptersByMangaId.await(manga.id)
-                    translatedChapterRepository.deleteAllForChapters(chapters.map { it.id })
-                }
-            }
-
             val clearOperations = buildList {
                 if (clearChaptersFromDb) add(LibraryClearJob.OP_CLEAR_CHAPTERS)
                 if (clearCovers) add(LibraryClearJob.OP_CLEAR_COVERS)
@@ -1053,7 +1020,7 @@ class LibraryScreenModel(
                 LibraryClearJob.start(Injekt.get<android.app.Application>(), mangas.map { it.id }, clearOperations)
             }
 
-            if (!deleteFromLibrary && (deleteChapters || deleteTranslations)) {
+            if (!deleteFromLibrary && deleteChapters) {
                 getLibraryManga.notifyChanged()
             }
         }
@@ -1072,7 +1039,6 @@ class LibraryScreenModel(
         deleteFromLibrary: Boolean,
         deleteChapters: Boolean,
         clearChaptersFromDb: Boolean = false,
-        deleteTranslations: Boolean = false,
         clearCovers: Boolean = false,
         clearDescriptions: Boolean = false,
         clearTags: Boolean = false,
@@ -1081,7 +1047,7 @@ class LibraryScreenModel(
             val ids = mangaRepository.getFavoriteIdsForCategory(categoryId)
             if (ids.isEmpty()) return@launchNonCancellable
 
-            val needsManga = deleteChapters || deleteTranslations || deleteFromLibrary
+            val needsManga = deleteChapters || deleteFromLibrary
             ids.chunked(500).forEach { chunk ->
                 val mangas = if (needsManga) {
                     mangaRepository.getMangaWithCountsLight(chunk).map { it.manga }
@@ -1093,13 +1059,6 @@ class LibraryScreenModel(
                     mangas.forEach { manga ->
                         val source = sourceManager.get(manga.source) as? HttpSource ?: return@forEach
                         downloadManager.deleteManga(manga, source)
-                    }
-                }
-
-                if (deleteTranslations) {
-                    mangas.forEach { manga ->
-                        val chapters = getChaptersByMangaId.await(manga.id)
-                        translatedChapterRepository.deleteAllForChapters(chapters.map { it.id })
                     }
                 }
 
@@ -1119,7 +1078,7 @@ class LibraryScreenModel(
                 LibraryClearJob.start(Injekt.get<android.app.Application>(), ids, clearOperations)
             }
 
-            if (!deleteFromLibrary && (deleteChapters || deleteTranslations)) {
+            if (!deleteFromLibrary && deleteChapters) {
                 getLibraryManga.notifyChanged()
             }
         }
@@ -1571,7 +1530,6 @@ class LibraryScreenModel(
             mangaIds = mangaList.map { it.id },
             outputUri = uri,
             downloadedOnly = options.downloadedOnly,
-            translationMode = options.translationMode,
             joinVolumes = options.joinVolumes,
             includeChapterCount = options.includeChapterCount,
             includeChapterRange = options.includeChapterRange,
@@ -1587,328 +1545,6 @@ class LibraryScreenModel(
                     "EPUB export started for ${mangaList.size} novels",
                     duration = SnackbarDuration.Short,
                 )
-            }
-        }
-        clearSelection()
-    }
-
-    // Legacy method kept for reference - now using EpubExportJob instead
-    @Suppress("ktlint:standard:max-line-length", "unused")
-    private fun exportNovelsAsEpubLegacy(
-        mangaList: List<Manga>,
-        uri: android.net.Uri,
-        options: eu.kanade.presentation.library.components.EpubExportOptions = eu.kanade.presentation.library.components.EpubExportOptions(),
-    ) {
-        screenModelScope.launchIO {
-            try {
-                val context = Injekt.get<android.app.Application>()
-                val downloadProvider = Injekt.get<DownloadProvider>()
-                val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
-
-                // Create a temp directory for the batch export
-                val tempDir = java.io.File(context.cacheDir, "epub_batch_export")
-                tempDir.mkdirs()
-
-                val results = mutableListOf<String>()
-                var successCount = 0
-                var skippedCount = 0
-
-                for ((index, manga) in mangaList.withIndex()) {
-                    withUIContext {
-                        snackbarHostState.showSnackbar(
-                            "Exporting ${index + 1}/${mangaList.size}: ${manga.title}",
-                            duration = SnackbarDuration.Short,
-                        )
-                    }
-
-                    try {
-                        val source = sourceManager.get(manga.source)
-                        if (source == null || !source.isNovelSource()) {
-                            results.add("${manga.title}: Not a novel source")
-                            continue
-                        }
-
-                        // The selected library Manga omits author/description (not kept resident);
-                        // fetch the full record so the EPUB metadata is complete.
-                        val exportManga = getManga.await(manga.id) ?: manga
-
-                        val chapters = getChaptersByMangaId.await(manga.id)
-                            .sortedBy { it.chapterNumber }
-
-                        if (chapters.isEmpty()) {
-                            results.add("${manga.title}: No chapters found")
-                            continue
-                        }
-
-                        val epubChapters = mutableListOf<mihon.core.archive.EpubWriter.Chapter>()
-                        var hasDownloads = false
-                        var firstChapterNum = Double.MAX_VALUE
-                        var lastChapterNum = Double.MIN_VALUE
-
-                        // Get translated chapter IDs for this manga if translation mode needs them
-                        val translatedChapterIds =
-                            @Suppress("ktlint:standard:max-line-length")
-                            if (options.translationMode !=
-                                tachiyomi.domain.translation.model.TranslationMode.ORIGINAL
-                            ) {
-                                translatedChapterRepository.getTranslatedChapterIds(chapters.map { it.id })
-                            } else {
-                                emptySet()
-                            }
-
-                        for ((chapterIndex, chapter) in chapters.withIndex()) {
-                            // Check if chapter is downloaded first
-                            val isDownloaded = downloadManager.isChapterDownloaded(
-                                chapter.name,
-                                chapter.scanlator,
-                                chapter.url,
-                                manga.title,
-                                manga.source,
-                            )
-
-                            // Check if chapter has translation
-                            val hasTranslation = chapter.id in translatedChapterIds
-
-                            if (isDownloaded) hasDownloads = true
-
-                            // Skip undownloaded chapters if downloadedOnly is true
-                            if (options.downloadedOnly && !isDownloaded && !hasTranslation) {
-                                continue
-                            }
-
-                            // Try to get translated content first if translation mode needs it
-                            var content: String? = null
-                            @Suppress("ktlint:standard:max-line-length")
-                            if (options.translationMode != tachiyomi.domain.translation.model.TranslationMode.ORIGINAL &&
-                                hasTranslation
-                            ) {
-                                @Suppress("ktlint:standard:max-line-length")
-                                try {
-                                    @Suppress("ktlint:standard:max-line-length")
-                                    val translations = translatedChapterRepository.getAllTranslationsForChapter(
-                                        chapter.id,
-                                    )
-                                    content = translations.firstOrNull()?.translatedContent
-                                } catch (e: Exception) {
-                                    logcat(LogPriority.WARN, e) {
-                                        "Failed to get translation for chapter: ${chapter.name}"
-                                    }
-                                }
-                            }
-
-                            // Fall back to original content if no translation or not preferred
-                            if (content == null && isDownloaded) {
-                                // Get from disk
-                                @Suppress("ktlint:standard:max-line-length")
-                                try {
-                                    val chapterDir = downloadProvider.findChapterDir(
-                                        chapter.name,
-                                        chapter.scanlator,
-                                        chapter.url,
-                                        manga.title,
-                                        source,
-                                    )
-
-                                    if (chapterDir != null) {
-                                        val htmlFiles = chapterDir.listFiles()?.filter {
-                                            it.isFile && it.name?.endsWith(".html") == true
-                                        }?.sortedBy { it.name } ?: emptyList()
-
-                                        if (htmlFiles.isNotEmpty()) {
-                                            val sb = StringBuilder()
-                                            htmlFiles.forEachIndexed { i, file ->
-                                                @Suppress("ktlint:standard:max-line-length")
-                                                val fileContent =
-                                                    context.contentResolver.openInputStream(file.uri)?.use {
-                                                        it.bufferedReader().readText()
-                                                    } ?: ""
-                                                sb.append(fileContent)
-                                                if (i < htmlFiles.size - 1) {
-                                                    sb.append("\n\n")
-                                                }
-                                            }
-                                            content = sb.toString()
-                                        }
-                                    }
-                                } catch (e: Exception) {
-                                    logcat(LogPriority.ERROR, e) {
-                                        "Failed to read downloaded chapter: ${chapter.name}"
-                                    }
-                                }
-                            }
-
-                            // Fetch from source if still no content
-                            if (content == null && !options.downloadedOnly) {
-                                @Suppress("ktlint:standard:max-line-length")
-                                try {
-                                    if (source is HttpSource) {
-                                        val pages = source.getPageList(chapter.toSChapter())
-                                        if (pages.isNotEmpty()) {
-                                            val page = pages.first()
-                                            val pageText = if (page.text != null) {
-                                                page.text
-                                            } else if (page.imageUrl != null) {
-                                                // For text-based novels, imageUrl may contain the actual text
-                                                page.imageUrl
-                                            } else {
-                                                "<p>No content available</p>"
-                                            }
-                                            content = pageText ?: "<p>No content available</p>"
-                                        } else {
-                                            content = "<p>No pages found</p>"
-                                        }
-                                    }
-                                } catch (e: Exception) {
-                                    logcat(LogPriority.WARN, e) {
-                                        "Failed to fetch chapter from source: ${chapter.name}"
-                                    }
-                                }
-                            }
-
-                            if (content != null) {
-                                // Track chapter numbers for filename
-                                val chNum = chapter.chapterNumber
-                                if (chNum < firstChapterNum) firstChapterNum = chNum
-                                if (chNum > lastChapterNum) lastChapterNum = chNum
-
-                                epubChapters.add(
-                                    mihon.core.archive.EpubWriter.Chapter(
-                                        title = chapter.name,
-                                        content = content,
-                                        order = chapterIndex,
-                                    ),
-                                )
-                            }
-                        }
-
-                        // Skip novels without any exported chapters
-                        if (epubChapters.isEmpty()) {
-                            if (options.downloadedOnly) {
-                                results.add("${manga.title}: Skipped (no downloads)")
-                                skippedCount++
-                            } else {
-                                results.add("${manga.title}: No chapters could be exported")
-                            }
-                            continue
-                        }
-
-                        // Get cover image
-                        val coverImage = try {
-                            exportManga.thumbnailUrl?.let { url ->
-                                val request = okhttp3.Request.Builder().url(url).build()
-                                networkHelper.client.newCall(request).execute().use { it.body.bytes() }
-                            }
-                        } catch (e: Exception) {
-                            null
-                        }
-
-                        // Create EPUB metadata
-                        val metadata = mihon.core.archive.EpubWriter.Metadata(
-                            title = exportManga.title,
-                            author = exportManga.author,
-                            description = exportManga.description,
-                            language = "en",
-                            genres = exportManga.genre ?: emptyList(),
-                            publisher = source.name,
-                        )
-
-                        // Build filename with options
-                        val filenameBuilder = StringBuilder(sanitizeFilename(manga.title))
-                        if (options.includeChapterCount) {
-                            filenameBuilder.append(" [${epubChapters.size}ch]")
-                        }
-                        if (options.includeChapterRange && firstChapterNum != Double.MAX_VALUE) {
-                            val firstCh = if (firstChapterNum == firstChapterNum.toLong().toDouble()) {
-                                firstChapterNum.toLong().toString()
-                            } else {
-                                firstChapterNum.toString()
-                            }
-                            val lastCh = if (lastChapterNum == lastChapterNum.toLong().toDouble()) {
-                                lastChapterNum.toLong().toString()
-                            } else {
-                                lastChapterNum.toString()
-                            }
-                            if (firstCh != lastCh) {
-                                filenameBuilder.append(" [ch$firstCh-$lastCh]")
-                            } else {
-                                filenameBuilder.append(" [ch$firstCh]")
-                            }
-                        }
-                        if (options.includeStatus) {
-                            val statusStr = when (manga.status) {
-                                SManga.ONGOING.toLong() -> "Ongoing"
-                                SManga.COMPLETED.toLong() -> "Completed"
-                                SManga.LICENSED.toLong() -> "Licensed"
-                                SManga.PUBLISHING_FINISHED.toLong() -> "Finished"
-                                SManga.CANCELLED.toLong() -> "Cancelled"
-                                SManga.ON_HIATUS.toLong() -> "Hiatus"
-                                else -> null
-                            }
-                            statusStr?.let { filenameBuilder.append(" [$it]") }
-                        }
-                        filenameBuilder.append(".epub")
-
-                        // Write to temp file
-                        val filename = filenameBuilder.toString()
-                        val tempFile = java.io.File(tempDir, filename)
-                        tempFile.outputStream().use { outputStream ->
-                            mihon.core.archive.EpubWriter().write(
-                                outputStream = outputStream,
-                                metadata = metadata,
-                                chapters = epubChapters,
-                                coverImage = coverImage,
-                            )
-                        }
-
-                        results.add("${manga.title}: Exported ${epubChapters.size} chapters")
-                        successCount++
-                    } catch (e: Exception) {
-                        logcat(LogPriority.ERROR, e) { "Failed to export ${manga.title}" }
-                        results.add("${manga.title}: Error - ${e.message}")
-                    }
-                }
-
-                // Create a ZIP of all EPUBs if multiple
-                if (mangaList.size > 1) {
-                    context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                        java.util.zip.ZipOutputStream(outputStream).use { zipOut ->
-                            tempDir.listFiles()?.forEach { file ->
-                                if (file.isFile && file.name.endsWith(".epub")) {
-                                    val entry = java.util.zip.ZipEntry(file.name)
-                                    zipOut.putNextEntry(entry)
-                                    file.inputStream().use { input ->
-                                        input.copyTo(zipOut)
-                                    }
-                                    zipOut.closeEntry()
-                                }
-                            }
-                        }
-                    }
-                } else if (tempDir.listFiles()?.isNotEmpty() == true) {
-                    // Single file, just copy
-                    val singleFile = tempDir.listFiles()!!.first()
-                    context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                        singleFile.inputStream().use { input ->
-                            input.copyTo(outputStream)
-                        }
-                    }
-                }
-
-                // Cleanup temp dir
-                tempDir.deleteRecursively()
-
-                withUIContext {
-                    val message = buildString {
-                        append("Exported $successCount/${mangaList.size} novels")
-                        if (skippedCount > 0) append(" ($skippedCount skipped)")
-                    }
-                    snackbarHostState.showSnackbar(message)
-                }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Batch EPUB export failed" }
-                withUIContext {
-                    snackbarHostState.showSnackbar("Export failed: ${e.message}")
-                }
             }
         }
         clearSelection()

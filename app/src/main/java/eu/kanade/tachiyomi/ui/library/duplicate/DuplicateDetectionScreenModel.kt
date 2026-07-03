@@ -29,7 +29,6 @@ import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.manga.model.MangaWithChapterCount
 import tachiyomi.domain.manga.repository.MangaRepository
 import tachiyomi.domain.source.service.SourceManager
-import tachiyomi.domain.translation.repository.TranslatedChapterRepository
 import tachiyomi.source.local.isLocal
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -44,7 +43,6 @@ class DuplicateDetectionScreenModel(
     private val libraryPreferences: tachiyomi.domain.library.service.LibraryPreferences = Injekt.get(),
     private val coverCache: CoverCache = Injekt.get(),
     private val getChaptersByMangaId: GetChaptersByMangaId = Injekt.get(),
-    private val translatedChapterRepository: TranslatedChapterRepository = Injekt.get(),
 ) : StateScreenModel<DuplicateDetectionScreenModel.State>(State()) {
 
     private val pinnedSourceIds: Set<Long> by lazy {
@@ -774,7 +772,6 @@ class DuplicateDetectionScreenModel(
         removeFromLibrary: Boolean,
         deleteDownloads: Boolean,
         clearChaptersFromDb: Boolean,
-        deleteTranslations: Boolean,
         clearCovers: Boolean,
         clearDescriptions: Boolean,
         clearTags: Boolean,
@@ -803,13 +800,6 @@ class DuplicateDetectionScreenModel(
                     } catch (e: Exception) {
                         logcat(LogPriority.ERROR) { "Error batch updating manga favorites: ${e.message}" }
                     }
-                }
-            }
-
-            if (deleteTranslations) {
-                selectedManga.forEach { manga ->
-                    val chapters = getChaptersByMangaId.await(manga.id)
-                    translatedChapterRepository.deleteAllForChapters(chapters.map { it.id })
                 }
             }
 

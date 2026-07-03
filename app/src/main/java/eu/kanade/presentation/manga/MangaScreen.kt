@@ -123,8 +123,6 @@ fun MangaScreen(
     onEditNotesClicked: () -> Unit,
     onEditClicked: (() -> Unit)? = null,
     onClearCustomInfoClicked: (() -> Unit)? = null,
-    onTranslateClicked: (() -> Unit)? = null,
-    onTranslateDownloadedClicked: (() -> Unit)? = null,
     onExportEpubClicked: (() -> Unit)? = null,
     showSourceName: Boolean = true,
     onToggleSourceNameVisibility: (() -> Unit)? = null,
@@ -135,9 +133,6 @@ fun MangaScreen(
     onMarkPreviousAsReadClicked: (Chapter) -> Unit,
     onMultiDeleteClicked: (List<Chapter>) -> Unit,
     onMultiRemoveFromDbClicked: (List<Chapter>) -> Unit,
-    onMultiDeleteTranslationClicked: (List<Chapter>) -> Unit,
-    onTranslateSelectedClicked: ((List<Chapter>) -> Unit)? = null,
-    onRetranslateSelectedClicked: ((List<Chapter>) -> Unit)? = null,
 
     // For chapter swipe
     onChapterSwipe: (ChapterList.Item, LibraryPreferences.ChapterSwipeAction) -> Unit,
@@ -186,8 +181,6 @@ fun MangaScreen(
             onEditNotesClicked = onEditNotesClicked,
             onEditClicked = onEditClicked,
             onClearCustomInfoClicked = onClearCustomInfoClicked,
-            onTranslateClicked = onTranslateClicked,
-            onTranslateDownloadedClicked = onTranslateDownloadedClicked,
             onExportEpubClicked = onExportEpubClicked,
             showSourceName = showSourceName,
             onToggleSourceNameVisibility = onToggleSourceNameVisibility,
@@ -196,9 +189,6 @@ fun MangaScreen(
             onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
             onMultiDeleteClicked = onMultiDeleteClicked,
             onMultiRemoveFromDbClicked = onMultiRemoveFromDbClicked,
-            onMultiDeleteTranslationClicked = onMultiDeleteTranslationClicked,
-            onTranslateSelectedClicked = onTranslateSelectedClicked,
-            onRetranslateSelectedClicked = onRetranslateSelectedClicked,
             onChapterSwipe = onChapterSwipe,
             onChapterSelected = onChapterSelected,
             onAllChapterSelected = onAllChapterSelected,
@@ -236,8 +226,6 @@ fun MangaScreen(
             onEditNotesClicked = onEditNotesClicked,
             onEditClicked = onEditClicked,
             onClearCustomInfoClicked = onClearCustomInfoClicked,
-            onTranslateClicked = onTranslateClicked,
-            onTranslateDownloadedClicked = onTranslateDownloadedClicked,
             onExportEpubClicked = onExportEpubClicked,
             showSourceName = showSourceName,
             onToggleSourceNameVisibility = onToggleSourceNameVisibility,
@@ -246,9 +234,6 @@ fun MangaScreen(
             onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
             onMultiDeleteClicked = onMultiDeleteClicked,
             onMultiRemoveFromDbClicked = onMultiRemoveFromDbClicked,
-            onMultiDeleteTranslationClicked = onMultiDeleteTranslationClicked,
-            onTranslateSelectedClicked = onTranslateSelectedClicked,
-            onRetranslateSelectedClicked = onRetranslateSelectedClicked,
             onChapterSwipe = onChapterSwipe,
             onChapterSelected = onChapterSelected,
             onAllChapterSelected = onAllChapterSelected,
@@ -296,8 +281,6 @@ private fun MangaScreenSmallImpl(
     onEditNotesClicked: () -> Unit,
     onEditClicked: (() -> Unit)?,
     onClearCustomInfoClicked: (() -> Unit)?,
-    onTranslateClicked: (() -> Unit)?,
-    onTranslateDownloadedClicked: (() -> Unit)?,
     onExportEpubClicked: (() -> Unit)?,
     showSourceName: Boolean,
     onToggleSourceNameVisibility: (() -> Unit)?,
@@ -308,9 +291,6 @@ private fun MangaScreenSmallImpl(
     onMarkPreviousAsReadClicked: (Chapter) -> Unit,
     onMultiDeleteClicked: (List<Chapter>) -> Unit,
     onMultiRemoveFromDbClicked: (List<Chapter>) -> Unit,
-    onMultiDeleteTranslationClicked: (List<Chapter>) -> Unit,
-    onTranslateSelectedClicked: ((List<Chapter>) -> Unit)? = null,
-    onRetranslateSelectedClicked: ((List<Chapter>) -> Unit)? = null,
 
     // For chapter swipe
     onChapterSwipe: (ChapterList.Item, LibraryPreferences.ChapterSwipeAction) -> Unit,
@@ -369,8 +349,6 @@ private fun MangaScreenSmallImpl(
                 onClickEditNotes = onEditNotesClicked,
                 onClickEdit = onEditClicked,
                 onClickClearCustomInfo = onClearCustomInfoClicked,
-                onClickTranslate = onTranslateClicked,
-                onClickTranslateDownloaded = onTranslateDownloadedClicked,
                 onClickExportEpub = onExportEpubClicked,
                 onClickScrollToTop = {
                     scrollScope.launch { chapterListState.animateScrollToItem(0) }
@@ -413,10 +391,7 @@ private fun MangaScreenSmallImpl(
                 onMultiDeleteClicked = onMultiDeleteClicked,
                 onMultiRemoveFromDbClicked = onMultiRemoveFromDbClicked,
                 onDeleteRangeClicked = null, // TODO: Implement delete range dialog
-                onMultiDeleteTranslationClicked = onMultiDeleteTranslationClicked,
-                onTranslateSelectedClicked = onTranslateSelectedClicked,
-                onRetranslateSelectedClicked = onRetranslateSelectedClicked,
-                fillFraction = 1f,
+                            fillFraction = 1f,
             )
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
@@ -599,8 +574,6 @@ fun MangaScreenLargeImpl(
     onEditNotesClicked: () -> Unit,
     onEditClicked: (() -> Unit)?,
     onClearCustomInfoClicked: (() -> Unit)?,
-    onTranslateClicked: (() -> Unit)?,
-    onTranslateDownloadedClicked: (() -> Unit)?,
     onExportEpubClicked: (() -> Unit)?,
     showSourceName: Boolean,
     onToggleSourceNameVisibility: (() -> Unit)?,
@@ -611,9 +584,6 @@ fun MangaScreenLargeImpl(
     onMarkPreviousAsReadClicked: (Chapter) -> Unit,
     onMultiDeleteClicked: (List<Chapter>) -> Unit,
     onMultiRemoveFromDbClicked: (List<Chapter>) -> Unit,
-    onMultiDeleteTranslationClicked: (List<Chapter>) -> Unit,
-    onTranslateSelectedClicked: ((List<Chapter>) -> Unit)? = null,
-    onRetranslateSelectedClicked: ((List<Chapter>) -> Unit)? = null,
 
     // For swipe actions
     onChapterSwipe: (ChapterList.Item, LibraryPreferences.ChapterSwipeAction) -> Unit,
@@ -665,8 +635,6 @@ fun MangaScreenLargeImpl(
                 onClickEditNotes = onEditNotesClicked,
                 onClickEdit = onEditClicked,
                 onClickClearCustomInfo = onClearCustomInfoClicked,
-                onClickTranslate = onTranslateClicked,
-                onClickTranslateDownloaded = onTranslateDownloadedClicked,
                 onClickExportEpub = onExportEpubClicked,
                 onClickScrollToTop = {
                     scrollScope.launch { chapterListState.animateScrollToItem(0) }
@@ -713,10 +681,7 @@ fun MangaScreenLargeImpl(
                     onMultiDeleteClicked = onMultiDeleteClicked,
                     onMultiRemoveFromDbClicked = onMultiRemoveFromDbClicked,
                     onDeleteRangeClicked = null, // TODO: Implement delete range dialog
-                    onMultiDeleteTranslationClicked = onMultiDeleteTranslationClicked,
-                    onTranslateSelectedClicked = onTranslateSelectedClicked,
-                    onRetranslateSelectedClicked = onRetranslateSelectedClicked,
-                    fillFraction = 0.5f,
+                                            fillFraction = 0.5f,
                 )
             }
         },
@@ -870,9 +835,6 @@ private fun SharedMangaBottomActionMenu(
     onMultiDeleteClicked: (List<Chapter>) -> Unit,
     onMultiRemoveFromDbClicked: (List<Chapter>) -> Unit,
     onDeleteRangeClicked: (() -> Unit)?,
-    onMultiDeleteTranslationClicked: ((List<Chapter>) -> Unit)? = null,
-    onTranslateSelectedClicked: ((List<Chapter>) -> Unit)? = null,
-    onRetranslateSelectedClicked: ((List<Chapter>) -> Unit)? = null,
     fillFraction: Float,
     modifier: Modifier = Modifier,
 ) {
@@ -908,27 +870,6 @@ private fun SharedMangaBottomActionMenu(
             onMultiRemoveFromDbClicked(selected.fastMap { it.chapter })
         },
         onDeleteRangeClicked = onDeleteRangeClicked,
-        onDeleteTranslationClicked = onMultiDeleteTranslationClicked?.let {
-            {
-                it(selected.fastMap { item -> item.chapter })
-            }.takeIf {
-                selected.fastAny { item -> item.hasTranslation }
-            }
-        },
-        onTranslateClicked = onTranslateSelectedClicked?.let {
-            {
-                it(selected.fastMap { item -> item.chapter })
-            }.takeIf {
-                selected.fastAny { item -> item.downloadState == Download.State.DOWNLOADED }
-            }
-        },
-        onRetranslateClicked = onRetranslateSelectedClicked?.let {
-            {
-                it(selected.fastMap { item -> item.chapter })
-            }.takeIf {
-                selected.fastAny { item -> item.hasTranslation }
-            }
-        },
     )
 }
 
@@ -1002,7 +943,6 @@ private fun LazyListScope.sharedChapterItems(
                     scanlator = item.chapter.scanlator.takeIf { !it.isNullOrBlank() },
                     read = item.chapter.read,
                     bookmark = item.chapter.bookmark,
-                    hasTranslation = item.hasTranslation,
                     selected = item.selected,
                     downloadIndicatorEnabled = !isAnyChapterSelected && !manga.isLocal(),
                     downloadStateProvider = { item.downloadState },

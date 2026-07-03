@@ -19,12 +19,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Pause
@@ -77,7 +75,6 @@ import eu.kanade.presentation.components.DropdownMenu
 import eu.kanade.presentation.components.NestedMenuItem
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.data.download.model.Download
-import eu.kanade.tachiyomi.data.translation.TranslationService
 import eu.kanade.tachiyomi.databinding.DownloadListBinding
 import eu.kanade.tachiyomi.util.system.copyToClipboard
 import tachiyomi.core.common.util.lang.launchUI
@@ -86,8 +83,6 @@ import tachiyomi.i18n.novel.TDMR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
-import uy.kohesive.injekt.Injekt
-import uy.kohesive.injekt.api.get
 import kotlin.math.roundToInt
 
 private enum class DownloadQueueFilter {
@@ -108,13 +103,7 @@ class DownloadQueueScreen(private val initialTab: Int = 0) : Screen() {
         val pausedGroups by screenModel.pausedNovelMangaIds.collectAsState()
         val titleMaxLines by screenModel.titleMaxLines.collectAsState()
 
-        val translationService = remember { Injekt.get<TranslationService>() }
-        val translationProgress by translationService.progressState.collectAsState()
-        val translationPaused by translationService.isPaused.collectAsState()
-        val translationQueue by translationService.queueState.collectAsState()
-        val currentTranslatingChapterId by translationService.currentTranslatingChapterId.collectAsState()
-
-        var selectedTab by remember { mutableStateOf(initialTab.coerceIn(0, 2)) }
+        var selectedTab by remember { mutableStateOf(initialTab.coerceIn(0, 1)) }
         var filterMode by remember { mutableStateOf(DownloadQueueFilter.All) }
         val canReorder = filterMode == DownloadQueueFilter.All
 
@@ -171,7 +160,6 @@ class DownloadQueueScreen(private val initialTab: Int = 0) : Screen() {
         val tabs = listOf(
             "${stringResource(TDMR.strings.label_novels)} ($novelCount)",
             "${stringResource(TDMR.strings.label_manga)} ($mangaCount)",
-            "${stringResource(TDMR.strings.label_translations)} (${translationQueue.size})",
         )
 
         val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
@@ -217,52 +205,7 @@ class DownloadQueueScreen(private val initialTab: Int = 0) : Screen() {
                     },
                     navigateUp = navigator::pop,
                     actions = {
-                        if (selectedTab == 2) {
-                            val translationActions = buildList {
-                                if (translationProgress.isRunning && !translationProgress.isCancelling) {
-                                    add(
-                                        AppBar.Action(
-                                            title = stringResource(
-                                                if (translationPaused) {
-                                                    MR.strings.pref_translation_resume
-                                                } else {
-                                                    MR.strings.pref_translation_pause
-                                                },
-                                            ),
-                                            icon = if (translationPaused) {
-                                                Icons.Filled.PlayArrow
-                                            } else {
-                                                Icons.Outlined.Pause
-                                            },
-                                            onClick = {
-                                                if (translationPaused) {
-                                                    translationService.resume()
-                                                } else {
-                                                    translationService.pause()
-                                                }
-                                            },
-                                        ),
-                                    )
-                                    add(
-                                        AppBar.Action(
-                                            title = stringResource(MR.strings.pref_translation_cancel),
-                                            icon = Icons.Filled.Stop,
-                                            onClick = { translationService.cancel() },
-                                        ),
-                                    )
-                                }
-                                if (translationQueue.isNotEmpty()) {
-                                    add(
-                                        AppBar.Action(
-                                            title = stringResource(MR.strings.pref_translation_clear_queue),
-                                            icon = Icons.Filled.DeleteSweep,
-                                            onClick = { translationService.clearQueue() },
-                                        ),
-                                    )
-                                }
-                            }
-                            AppBarActions(translationActions.toList())
-                        } else if ((selectedTab == 1 && filteredMangaList.isNotEmpty()) ||
+                        if ((selectedTab == 1 && filteredMangaList.isNotEmpty()) ||
                             (selectedTab == 0 && filteredNovelList.isNotEmpty())
                         ) {
                             var sortExpanded by remember { mutableStateOf(false) }
@@ -527,15 +470,10 @@ class DownloadQueueScreen(private val initialTab: Int = 0) : Screen() {
                 }
 
                 if ((selectedTab == 1 && filteredMangaList.isEmpty()) ||
-                    (selectedTab == 0 && filteredNovelList.isEmpty()) ||
-                    (selectedTab == 2 && translationQueue.isEmpty() && !translationProgress.isRunning)
+                    (selectedTab == 0 && filteredNovelList.isEmpty())
                 ) {
                     EmptyScreen(
-                        stringRes = if (selectedTab == 2) {
-                            MR.strings.pref_translation_status_idle
-                        } else {
-                            MR.strings.information_no_downloads
-                        },
+                        stringRes = MR.strings.information_no_downloads,
                     )
                 } else {
                     val density = LocalDensity.current
@@ -549,17 +487,7 @@ class DownloadQueueScreen(private val initialTab: Int = 0) : Screen() {
                     val bottom = with(density) { contentPadding.calculateBottomPadding().toPx().roundToInt() }
 
                     Box(modifier = Modifier.nestedScroll(nestedScrollConnection)) {
-                        if (selectedTab == 2) {
-                            TranslationQueueContent(
-                                progress = translationProgress,
-                                isPaused = translationPaused,
-                                queueItems = translationQueue,
-                                currentTranslatingChapterId = currentTranslatingChapterId,
-                                onMoveMangaToTop = translationService::moveMangaToFront,
-                                onRemoveAllForManga = translationService::dequeueAllForManga,
-                                onRemoveTask = translationService::dequeue,
-                            )
-                        } else if (selectedTab == 1) {
+                        if (selectedTab == 1) {
                             AndroidView(
                                 modifier = Modifier.fillMaxWidth(),
                                 factory = { context ->

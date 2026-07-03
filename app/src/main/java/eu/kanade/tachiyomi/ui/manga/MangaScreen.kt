@@ -202,8 +202,6 @@ class MangaScreen(
             } else {
                 null
             },
-            onTranslateClicked = screenModel::translateMangaDetails,
-            onTranslateDownloadedClicked = screenModel::translateDownloadedChapters,
             onExportEpubClicked = screenModel::showExportEpubDialog.takeIf { successState.isNovel },
             showSourceName = successState.showSourceName,
             onToggleSourceNameVisibility = screenModel::toggleSourceNameVisibility,
@@ -212,13 +210,6 @@ class MangaScreen(
             onMarkPreviousAsReadClicked = screenModel::markPreviousChapterRead,
             onMultiDeleteClicked = screenModel::showDeleteChapterDialog,
             onMultiRemoveFromDbClicked = screenModel::showRemoveChaptersFromDbDialog,
-            onMultiDeleteTranslationClicked = screenModel::deleteTranslations,
-            onTranslateSelectedClicked = { chapters ->
-                screenModel.translateSelectedChapters(chapters, forceRetranslate = false)
-            },
-            onRetranslateSelectedClicked = { chapters ->
-                screenModel.translateSelectedChapters(chapters, forceRetranslate = true)
-            },
             onChapterSwipe = screenModel::chapterSwipe,
             onChapterSelected = screenModel::toggleSelection,
             onAllChapterSelected = screenModel::toggleAllSelection,
@@ -392,15 +383,6 @@ class MangaScreen(
                         TextButton(onClick = onDismissRequest) {
                             Text(stringResource(MR.strings.action_cancel))
                         }
-                    },
-                )
-            }
-            is MangaScreenModel.Dialog.TranslateMangaDetails -> {
-                eu.kanade.presentation.manga.components.TranslateMangaDetailsDialog(
-                    manga = dialog.manga,
-                    onDismissRequest = onDismissRequest,
-                    onConfirm = { details ->
-                        screenModel.applyTranslatedDetails(details)
                     },
                 )
             }

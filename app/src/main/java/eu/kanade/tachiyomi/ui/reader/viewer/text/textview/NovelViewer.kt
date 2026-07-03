@@ -676,7 +676,7 @@ class NovelViewer(val activity: ReaderActivity) : Viewer {
         return container
     }
 
-    fun reloadWithTranslation() {
+    fun reprocessContent() {
         val generation = ++renderGeneration
         loadedChapters.forEach { loadedChapter ->
             val page = loadedChapter.chapter.pages?.firstOrNull() ?: return@forEach
@@ -690,21 +690,8 @@ class NovelViewer(val activity: ReaderActivity) : Viewer {
             )
 
             scope.launch {
-                val pre = withContext(Dispatchers.Default) { contentPipeline.preTranslate(content, cfg) }
-                val processed = if (activity.isTranslationEnabled()) {
-                    val chapterId = loadedChapter.chapter.chapter.id
-                    val labelRes = if (activity.hasCachedTranslation(chapterId)) {
-                        TDMR.strings.novel_chapter_translating_from_cache
-                    } else {
-                        TDMR.strings.novel_chapter_translating_from_api
-                    }
-                    block.showPlaceholder(activity.stringResource(labelRes))
-                    withContext(Dispatchers.Default) {
-                        contentPipeline.finalize(pre, cfg) { activity.translateContentIfEnabled(it, chapterId) }
-                    }
-                } else {
-                    withContext(Dispatchers.Default) { contentPipeline.finalize(pre, cfg) }
-                }
+                val pre = withContext(Dispatchers.Default) { contentPipeline.preProcess(content, cfg) }
+                val processed = withContext(Dispatchers.Default) { contentPipeline.finalize(pre, cfg) }
                 if (generation != renderGeneration) return@launch
                 if (!block.container.isAttachedToWindow) return@launch
                 setChapterContent(loadedChapter, processed)
@@ -856,23 +843,9 @@ class NovelViewer(val activity: ReaderActivity) : Viewer {
             chapter.chapter.name,
         )
         scope.launch {
-            val pre = withContext(Dispatchers.Default) { contentPipeline.preTranslate(rawContent, cfg) }
-            if (activity.isTranslationEnabled() && !preferences.novelShowRawHtml.get()) {
-                val chapterId = chapter.chapter.id
-                val labelRes = if (activity.hasCachedTranslation(chapterId)) {
-                    TDMR.strings.novel_chapter_translating_from_cache
-                } else {
-                    TDMR.strings.novel_chapter_translating_from_api
-                }
-                block.showPlaceholder(activity.stringResource(labelRes))
-                val translated = withContext(Dispatchers.Default) {
-                    contentPipeline.finalize(pre, cfg) { activity.translateContentIfEnabled(it, chapterId) }
-                }
-                setChapterContent(loadedChapter, translated)
-            } else {
-                val processed = withContext(Dispatchers.Default) { contentPipeline.finalize(pre, cfg) }
-                setChapterContent(loadedChapter, processed)
-            }
+            val pre = withContext(Dispatchers.Default) { contentPipeline.preProcess(rawContent, cfg) }
+            val processed = withContext(Dispatchers.Default) { contentPipeline.finalize(pre, cfg) }
+            setChapterContent(loadedChapter, processed)
         }
 
         applyBackgroundColor()

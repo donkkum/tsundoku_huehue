@@ -114,7 +114,6 @@
     <string name="action_show_manga">Show entry</string>
     <string name="action_copy_to_clipboard">Copy to clipboard</string>
     <string name="action_copy_link">Copy link</string>
-    <!-- Do not translate "WebView" -->
     <string name="action_open_in_web_view">Open in WebView</string>
     <string name="action_web_view" translatable="false">WebView</string>
     <string name="action_migrate">Migrate</string>
@@ -1052,9 +1051,7 @@
     <string name="information_cloudflare_bypass_failure">Failed to bypass Cloudflare</string>
     <string name="information_cloudflare_help">Tap here for help with Cloudflare</string>
     <string name="information_required_plain">*required</string>
-    <!-- Do not translate "WebView" -->
     <string name="information_webview_required">WebView is required for the app to function</string>
-    <!-- Do not translate "WebView" -->
     <string name="information_webview_outdated">Please update the WebView app for better compatibility</string>
     <string name="chapter_settings_updated">Updated default chapter settings</string>
 
@@ -1088,7 +1085,6 @@
     <string name="remove_manga">You are about to remove \"%s\" from your library</string>
 
     <!-- Common exceptions -->
-    <!-- Do not translate "WebView" -->
     <string name="exception_http">HTTP %d, check website in WebView</string>
     <string name="exception_offline">No Internet connection</string>
     <string name="exception_unknown_host">Couldn\'t reach %s</string>
@@ -1136,65 +1132,6 @@
     <string name="migrationListScreen.progressDialog.cancelLabel">Cancel</string>
     <string name="migrationListScreen.matchWithoutChapterToast">No chapters found, this entry cannot be used for migration</string>
 
-    <!-- Translation settings -->
-    <string name="pref_translation_replace_title">Replace title with translation</string>
-    <string name="pref_translation_replace_title_desc">When translating, replace the manga/novel title with the translated version. Original title is saved to alternative titles.</string>
-    <string name="pref_translation_save_alt_titles">Save translated titles as alternative</string>
-    <string name="pref_translation_save_alt_titles_desc">Store translated titles in alternative_titles for reference</string>
-    <string name="pref_translation_translate_tags">Translate tags</string>
-    <string name="pref_translation_translate_tags_desc">Translate genre tags and merge with original tags</string>
-    <string name="pref_translation_smart_auto">Smart auto-translate</string>
-    <string name="pref_translation_smart_auto_desc">Detect source language and skip translation if it matches target language</string>
-    <string name="pref_translation_chunk_mode">Translation chunk mode</string>
-    <string name="pref_translation_chunk_mode_paragraphs">Group by paragraphs (%d per chunk)</string>
-    <string name="pref_translation_chunk_mode_characters">Group by characters (%d per chunk)</string>
-    <string name="pref_translation_chunk_mode_words">Group by words (%d per chunk)</string>
-    <string name="pref_translation_chunk_paragraphs">Paragraphs</string>
-    <string name="pref_translation_chunk_characters">Characters</string>
-    <string name="pref_translation_chunk_words">Words</string>
-    <string name="pref_translation_chunk_size">Translation chunk size</string>
-    <string name="pref_translation_chunk_paragraphs_rec">Paragraphs per chunk (recommended: 20–100)</string>
-    <string name="pref_translation_chunk_characters_rec">Characters per chunk (recommended: 1000–5000)</string>
-    <string name="pref_translation_chunk_words_rec">Words per chunk (recommended: 200–2000)</string>
-    <string name="pref_translation_chunk_units">Units per chunk</string>
-    <string name="pref_translation_contextual_anchoring">Contextual anchoring</string>
-    <string name="pref_translation_contextual_anchoring_desc">Send previous translated paragraphs as context to LLM engines for better consistency</string>
-    <string name="pref_translation_contextual_anchoring_paragraphs">Context paragraphs</string>
-    <string name="pref_translation_contextual_anchoring_paragraphs_desc">Number of paragraphs from the previous chunk to include as context</string>
-    <string name="pref_translation_offline_suffix"> (Offline)</string>
-    <string name="pref_translation_queue">Translation Queue</string>
-    <string name="pref_translation_status">Status</string>
-    <string name="pref_translation_status_cancelling">Cancelling…</string>
-    <string name="pref_translation_status_paused">Paused — %1$d/%2$d completed</string>
-    <string name="pref_translation_status_chunk_info"> (chunk %1$d/%2$d)</string>
-    <string name="pref_translation_status_translating">Translating: %1$s%2$s (%3$d/%4$d)</string>
-    <string name="pref_translation_status_done">Done — %d chapters translated</string>
-    <string name="pref_translation_status_idle">Idle — no tasks in queue</string>
-    <string name="pref_translation_resume">Resume</string>
-    <string name="pref_translation_pause">Pause</string>
-    <string name="pref_translation_resume_desc">Resume processing queued translations</string>
-    <string name="pref_translation_pause_desc">Pause translation processing</string>
-    <string name="pref_translation_cancel">Cancel</string>
-    <string name="pref_translation_cancel_desc">Cancel current translation (saves partial progress)</string>
-    <string name="pref_translation_clear_queue">Clear Queue</string>
-    <string name="pref_translation_clear_queue_desc">Remove all pending translations from the queue</string>
-    <string name="pref_translation_test_engine">Test %s</string>
-    <string name="pref_translation_testing">Testing…</string>
-    <string name="pref_translation_test_send">Send a test translation</string>
-    <string name="pref_translation_test_text">Hello, this is a test.</string>
-    <string name="pref_translation_system_prompt">System Prompt</string>
-    <string name="pref_translation_system_prompt_desc">Custom system prompt for GPT models. Leave empty for default.</string>
-    <string name="pref_translation_user_prompt">User Prompt Template</string>
-    <string name="pref_translation_user_prompt_desc">Use {SOURCE_LANG}, {TARGET_LANG}, {TEXT} as placeholders.</string>
-    <string name="pref_translation_api_key">API Key</string>
-    <string name="pref_translation_api_url">API URL</string>
-    <string name="pref_translation_custom_prompt">Custom Prompt</string>
-    <string name="pref_translation_request_method">Request Method</string>
-    <string name="pref_translation_custom_headers">Custom Headers</string>
-    <string name="pref_translation_custom_headers_desc">"Name: Value" pairs separated by ; or line breaks, override defaults. {apiKey} is replaced with the API key</string>
-    <string name="pref_translation_request_template">Request Template</string>
-    <string name="pref_translation_request_template_desc">Use {texts}, {text}, {text_esc}, {source}, {target}, {source_name}, {target_name}</string>
-    <string name="pref_translation_response_path">Response Path</string>
 
     <!-- EPUB compression settings -->
     <string name="pref_epub_compression_level">EPUB compression level</string>
@@ -1207,10 +1144,6 @@
     <string name="pref_epub_compression_level_label">Level %d</string>
 
     <!-- Advanced settings - data section -->
-    <string name="pref_delete_all_translations">Delete all translations</string>
-    <string name="pref_delete_all_translations_subtitle">Deletes all downloaded translations</string>
-    <string name="pref_delete_all_translations_confirm">Are you sure you want to delete all downloaded translations? This cannot be undone.</string>
-    <string name="pref_all_translations_deleted">All translations deleted</string>
     <string name="pref_clear_temp_files">Clear temp files</string>
     <string name="pref_clear_temp_files_subtitle">Clears temporary files from app cache (epub exports, network cache, etc.)</string>
     <string name="pref_temp_files_cleared">Cleared %s of temp files</string>
@@ -1229,9 +1162,6 @@
     <string name="pref_bulk_remove_url">Bulk remove by URL</string>
     <string name="pref_bulk_remove_url_subtitle">Remove or move multiple entries from library by URL list</string>
 
-    <!-- Translation queue / batch -->
-    <string name="translation_all_downloaded_already_translated">All downloaded chapters are already translated</string>
-    <string name="translation_selected_already_translated">Selected chapters are already translated</string>
 
     <!-- Batch update -->
     <string name="batch_updating_entries">Updating %d entries…</string>

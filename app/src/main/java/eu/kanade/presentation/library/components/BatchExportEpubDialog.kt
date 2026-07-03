@@ -24,11 +24,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.util.epub.EpubExportNaming
 import tachiyomi.domain.manga.model.Manga
-import tachiyomi.domain.translation.model.TranslationMode
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.novel.TDMR
 import tachiyomi.presentation.core.components.CheckboxItem
-import tachiyomi.presentation.core.components.RadioItem
 import tachiyomi.presentation.core.i18n.stringResource
 
 /**
@@ -36,7 +34,6 @@ import tachiyomi.presentation.core.i18n.stringResource
  */
 data class EpubExportOptions(
     val downloadedOnly: Boolean = false,
-    val translationMode: TranslationMode = TranslationMode.ORIGINAL,
     val joinVolumes: Boolean = true,
     // Filename options
     val includeChapterCount: Boolean = false,
@@ -65,7 +62,6 @@ fun BatchExportEpubDialog(
         )
     }
     var downloadedOnly by remember { mutableStateOf(false) }
-    var translationMode by remember { mutableStateOf(TranslationMode.ORIGINAL) }
     var joinVolumes by remember { mutableStateOf(true) }
     var includeChapterCount by remember { mutableStateOf(false) }
     var includeChapterRange by remember { mutableStateOf(false) }
@@ -74,8 +70,8 @@ fun BatchExportEpubDialog(
     var includeCustomCss by remember { mutableStateOf(false) }
     var includeCustomJs by remember { mutableStateOf(false) }
 
-    // "Both" mode produces two EPUBs → always ZIP; multi-novel → always ZIP
-    val needsZip = !isSingleNovel || translationMode == TranslationMode.BOTH || !joinVolumes
+    // Multi-novel → always ZIP
+    val needsZip = !isSingleNovel || !joinVolumes
     val mimeType = if (needsZip) "application/zip" else "application/epub+zip"
 
     val launcher = rememberLauncherForActivityResult(
@@ -86,7 +82,6 @@ fun BatchExportEpubDialog(
                 uri,
                 EpubExportOptions(
                     downloadedOnly = downloadedOnly,
-                    translationMode = translationMode,
                     joinVolumes = joinVolumes,
                     includeChapterCount = includeChapterCount,
                     includeChapterRange = includeChapterRange,
@@ -166,32 +161,6 @@ fun BatchExportEpubDialog(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = stringResource(TDMR.strings.epub_translation_mode),
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(vertical = 4.dp),
-                )
-
-                RadioItem(
-                    label = stringResource(TDMR.strings.epub_translation_original),
-                    selected = translationMode == TranslationMode.ORIGINAL,
-                    onClick = { translationMode = TranslationMode.ORIGINAL },
-                )
-
-                RadioItem(
-                    label = stringResource(TDMR.strings.epub_translation_translated),
-                    selected = translationMode == TranslationMode.TRANSLATED,
-                    onClick = { translationMode = TranslationMode.TRANSLATED },
-                )
-
-                RadioItem(
-                    label = stringResource(TDMR.strings.epub_translation_both),
-                    selected = translationMode == TranslationMode.BOTH,
-                    onClick = { translationMode = TranslationMode.BOTH },
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
                     text = stringResource(TDMR.strings.epub_filename_options),
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.padding(vertical = 4.dp),
@@ -257,12 +226,6 @@ fun BatchExportEpubDialog(
                         stringResource(TDMR.strings.epub_downloaded_only_info)
                     } else {
                         stringResource(TDMR.strings.epub_source_info)
-                    } + when (translationMode) {
-                        TranslationMode.TRANSLATED ->
-                            " " +
-                                stringResource(TDMR.strings.epub_translation_translated_info)
-                        TranslationMode.BOTH -> " " + stringResource(TDMR.strings.epub_translation_both_info)
-                        else -> ""
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

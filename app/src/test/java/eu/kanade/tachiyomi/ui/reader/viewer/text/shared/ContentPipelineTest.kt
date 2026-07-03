@@ -155,26 +155,6 @@ class ContentPipelineTest {
         assertFalse(result.text.contains("<!--"))
     }
 
-    // ── Translator hook runs before sanitize ──────────────────────────────────────
-
-    @Test
-    fun `translator output is sanitized for TEXT_VIEW`() = runBlocking {
-        val pipeline = pipelineWith()
-        val result = pipeline.process(
-            "<p>Original</p>",
-            cfg(target = RenderTarget.TEXT_VIEW),
-        ) { "<p>Translated</p><script>alert(2)</script>" }
-        assertTrue(result.text.contains("Translated"))
-        assertFalse(result.text.contains("<script"))
-    }
-
-    @Test
-    fun `translator skipped when null`() = runBlocking {
-        val pipeline = pipelineWith()
-        val result = pipeline.process("<p>Body</p>", cfg())
-        assertTrue(result.text.contains("Body"))
-    }
-
     // ── Plain-text mode propagation ────────────────────────────────────────────────
 
     @Test
@@ -225,14 +205,14 @@ class ContentPipelineTest {
         assertEquals("bar\nbaz", result.text)
     }
 
-    // ── preTranslate + finalize: shared cache for two-pass renders ─────────────────
+    // ── preProcess + finalize: shared cache for two-pass renders ─────────────────
 
     @Test
-    fun `preTranslate plus finalize equals process for no-translator case`() = runBlocking {
+    fun `preProcess plus finalize equals process`() = runBlocking {
         val pipeline = pipelineWith()
         val cfg = cfg()
         val direct = pipeline.process("<p>foo</p>", cfg)
-        val pre = pipeline.preTranslate("<p>foo</p>", cfg)
+        val pre = pipeline.preProcess("<p>foo</p>", cfg)
         val staged = pipeline.finalize(pre, cfg)
         assertEquals(direct.text, staged.text)
         assertEquals(direct.isPlainText, staged.isPlainText)
@@ -240,35 +220,11 @@ class ContentPipelineTest {
     }
 
     @Test
-    fun `preTranslate plus finalize with translator equals process with translator`() = runBlocking {
+    fun `pipeline is idempotent on pre-process stage`() {
         val pipeline = pipelineWith()
-        val cfg = cfg()
-        val translator: suspend (String) -> String = { "$it[TRANSLATED]" }
-        val direct = pipeline.process("<p>foo</p>", cfg, translator)
-        val pre = pipeline.preTranslate("<p>foo</p>", cfg)
-        val staged = pipeline.finalize(pre, cfg, translator)
-        assertEquals(direct.text, staged.text)
-    }
-
-    @Test
-    fun `finalize from same pre with and without translator differs only by translator output`() = runBlocking {
-        val pipeline = pipelineWith()
-        val cfg = cfg()
-        val pre = pipeline.preTranslate("<p>foo</p>", cfg)
-        val plain = pipeline.finalize(pre, cfg)
-        val translated = pipeline.finalize(pre, cfg) { "$it<!--T-->" }
-        assertFalse(plain.text.contains("<!--T-->"))
-        // Translator-injected comment is then stripped by sanitize, so we shouldn't see it
-        // either — but the pre-translator text should match plain's text up to that point.
-        assertFalse(translated.text.contains("<!--T-->"))
-    }
-
-    @Test
-    fun `pipeline is idempotent on pre-translate stage`() {
-        val pipeline = pipelineWith()
-        val pre1 = pipeline.preTranslate("<p>foo</p>", cfg())
-        val pre2 = pipeline.preTranslate(pre1.text, cfg())
-        // Running pre-translate again on its own output should not introduce changes
+        val pre1 = pipeline.preProcess("<p>foo</p>", cfg())
+        val pre2 = pipeline.preProcess(pre1.text, cfg())
+        // Running preProcess again on its own output should not introduce changes
         // for HTML chapters (normalize is passthrough on HTML).
         assertEquals(pre1.text, pre2.text)
     }

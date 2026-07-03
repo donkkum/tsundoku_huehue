@@ -14,6 +14,7 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import mihon.domain.manga.model.toDomainManga
 import tachiyomi.domain.category.interactor.SetMangaCategories
+import tachiyomi.domain.manga.interactor.GetLibraryManga
 import tachiyomi.domain.manga.interactor.GetMangaByUrlAndSourceId
 import tachiyomi.domain.manga.interactor.NetworkToLocalManga
 import tachiyomi.domain.manga.model.MangaUpdate
@@ -39,6 +40,7 @@ class RestoreFromDownloads(
     private val storageManager: StorageManager = Injekt.get(),
     private val networkToLocalManga: NetworkToLocalManga = Injekt.get(),
     private val getMangaByUrlAndSourceId: GetMangaByUrlAndSourceId = Injekt.get(),
+    private val getLibraryManga: GetLibraryManga = Injekt.get(),
     private val mangaRepository: MangaRepository = Injekt.get(),
     private val sourceManager: SourceManager = Injekt.get(),
     private val syncChaptersWithSource: SyncChaptersWithSource = Injekt.get(),
@@ -110,6 +112,14 @@ class RestoreFromDownloads(
 
                         try {
                             val sanitized = sanitize(novel.title)
+
+                            // Skip if already in library
+                            val existing = getMangaByUrlAndSourceId.await(sanitized, LOCAL_NOVEL_SOURCE_ID)
+                            if (existing?.favorite == true) {
+                                skipped.incrementAndGet()
+                                return@withPermit
+                            }
+
                             val novelDir = localNovelsDir.findFile(sanitized)
                                 ?: localNovelsDir.createDirectory(sanitized)
                             if (novelDir == null) {
@@ -126,7 +136,6 @@ class RestoreFromDownloads(
                             }
 
                             // Register in DB
-                            val existing = getMangaByUrlAndSourceId.await(sanitized, LOCAL_NOVEL_SOURCE_ID)
                             val manga = existing ?: run {
                                 val placeholder = eu.kanade.tachiyomi.source.model.SManga.create().apply {
                                     title = novel.title
@@ -155,6 +164,8 @@ class RestoreFromDownloads(
                 }
             }.awaitAll()
         }
+
+        if (restored.get() > 0) getLibraryManga.notifyChanged()
 
         Result(restored = restored.get(), skipped = skipped.get(), errors = errors)
     }

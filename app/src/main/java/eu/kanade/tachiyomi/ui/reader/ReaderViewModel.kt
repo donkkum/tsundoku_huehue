@@ -28,7 +28,6 @@ import eu.kanade.tachiyomi.data.download.model.Download
 import eu.kanade.tachiyomi.data.saver.Image
 import eu.kanade.tachiyomi.data.saver.ImageSaver
 import eu.kanade.tachiyomi.data.saver.Location
-import eu.kanade.tachiyomi.data.translation.TranslationService
 import eu.kanade.tachiyomi.jsplugin.source.JsSource
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.isNovelSource
@@ -97,7 +96,6 @@ import tachiyomi.domain.manga.interactor.GetLibraryManga
 import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.source.service.SourceManager
-import tachiyomi.domain.translation.service.TranslationPreferences
 import tachiyomi.source.local.isLocal
 import tachiyomi.source.local.isLocalNovel
 import uy.kohesive.injekt.Injekt
@@ -129,20 +127,13 @@ class ReaderViewModel @JvmOverloads constructor(
     private val setMangaViewerFlags: SetMangaViewerFlags = Injekt.get(),
     private val getIncognitoState: GetIncognitoState = Injekt.get(),
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
-    private val translationPreferences: TranslationPreferences = Injekt.get(),
-    private val translationService: TranslationService = Injekt.get(),
     private val getLibraryManga: GetLibraryManga = Injekt.get(),
 ) : ViewModel() {
     private val quoteManager: QuoteManager by lazy {
         QuoteManager(Injekt.get<Application>())
     }
 
-    private val mutableState = MutableStateFlow(
-        State(
-            isTranslating = translationPreferences.translationEnabled().get() &&
-                translationPreferences.smartAutoTranslate().get(),
-        ),
-    )
+    private val mutableState = MutableStateFlow(State())
     val state = mutableState.asStateFlow()
 
     private val eventChannel = Channel<Event>()
@@ -274,8 +265,6 @@ class ReaderViewModel @JvmOverloads constructor(
             .map(::ReaderChapter)
     }
 
-    private val pendingTranslationAheadChapterIds = mutableSetOf<Long>()
-
     private val incognitoMode: Boolean by lazy { getIncognitoState.await(manga?.source) }
     private val downloadAheadAmount = downloadPreferences.autoDownloadWhileReading.get()
 
@@ -317,14 +306,6 @@ class ReaderViewModel @JvmOverloads constructor(
             }
             .launchIn(viewModelScope)
 
-        downloadManager.statusFlow()
-            .filter { it.status == Download.State.DOWNLOADED }
-            .onEach { download ->
-                if (pendingTranslationAheadChapterIds.remove(download.chapterId)) {
-                    enqueueDownloadedChapterForTranslation(download.chapterId)
-                }
-            }
-            .launchIn(viewModelScope)
     }
 
     override fun onCleared() {
@@ -416,9 +397,6 @@ class ReaderViewModel @JvmOverloads constructor(
                 )
             }
         }
-
-        // Prioritize this chapter for translation if it's a novel and translation is enabled
-        enqueueTranslationIfNeeded(chapter)
 
         return newChapters
     }
@@ -577,31 +555,6 @@ class ReaderViewModel @JvmOverloads constructor(
                 }
             }
 
-            enqueueTranslationIfNeeded(chapter)
-        }
-    }
-
-    /**
-     * Enqueue a chapter for translation if the manga is a novel source and translation is enabled.
-     * Manually read chapters get [TranslationService.PRIORITY_MANUAL_READ].
-     */
-    private fun enqueueTranslationIfNeeded(chapter: ReaderChapter) {
-        val currentManga = manga ?: return
-        if (
-            sourceManager.get(currentManga.source)?.isNovelSource() == true &&
-            translationPreferences.translationEnabled().get() &&
-            translationPreferences.smartAutoTranslate().get()
-        ) {
-            val chapterId = chapter.chapter.id ?: return
-            viewModelScope.launchIO {
-                // Already cached for this chapter+lang: the viewer serves it, no API call.
-                if (translationService.hasTranslation(chapterId)) return@launchIO
-                translationService.enqueue(
-                    manga = currentManga,
-                    chapter = chapter.chapter.toDomainChapter()!!,
-                    priority = TranslationService.PRIORITY_MANUAL_READ,
-                )
-            }
         }
     }
 
@@ -836,21 +789,6 @@ class ReaderViewModel @JvmOverloads constructor(
                 chaptersToDownload,
             )
 
-            chaptersToDownload.forEach { chapter ->
-                val chapterId = chapter.id ?: return@forEach
-                val isAlreadyDownloaded = downloadManager.isChapterDownloaded(
-                    chapter.name,
-                    chapter.scanlator,
-                    chapter.url,
-                    manga.title,
-                    manga.source,
-                )
-                if (isAlreadyDownloaded) {
-                    enqueueDownloadedChapterForTranslation(chapterId)
-                } else {
-                    pendingTranslationAheadChapterIds.add(chapterId)
-                }
-            }
         }
     }
 
@@ -1055,125 +993,6 @@ class ReaderViewModel @JvmOverloads constructor(
     }
 
     /**
-     * Toggles translation mode for the current chapter.
-     * When toggled on, triggers reload to translate content.
-     * When toggled off, triggers reload to show original content.
-     */
-    fun toggleTranslation() {
-        val newState = !state.value.isTranslating
-        mutableState.update {
-            it.copy(isTranslating = newState)
-        }
-
-        // Send event to reload content with new translation state
-        viewModelScope.launchIO {
-            try {
-                eventChannel.send(Event.ReloadWithTranslation)
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Error reloading chapter for translation" }
-            }
-        }
-    }
-
-    /**
-     * Turns translation mode off without triggering a reload.
-     */
-    fun disableTranslation() {
-        if (state.value.isTranslating) {
-            mutableState.update { it.copy(isTranslating = false) }
-        }
-    }
-
-    /**
-     * Force retranslate the current chapter.
-     * Deletes existing translation and re-enqueues for translation.
-     */
-    fun retranslateCurrentChapter() {
-        val currentManga = manga ?: return
-        val chapter = getCurrentChapter()?.chapter?.toDomainChapter() ?: return
-
-        viewModelScope.launchIO {
-            translationService.enqueue(
-                manga = currentManga,
-                chapter = chapter,
-                priority = TranslationService.PRIORITY_MANUAL_READ,
-                forceRetranslate = true,
-            )
-            // Enable translation mode and reload
-            mutableState.update { it.copy(isTranslating = true) }
-            try {
-                eventChannel.send(Event.ReloadWithTranslation)
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Error reloading chapter for retranslation" }
-            }
-        }
-    }
-
-    private fun enqueueDownloadedChapterForTranslation(chapterId: Long) {
-        val currentManga = manga ?: return
-        val chapter = chapterList.firstOrNull { it.chapter.id == chapterId } ?: return
-
-        if (
-            sourceManager.get(currentManga.source)?.isNovelSource() == true &&
-            translationPreferences.translationEnabled().get() &&
-            translationPreferences.smartAutoTranslate().get()
-        ) {
-            translationService.enqueue(
-                manga = currentManga,
-                chapter = chapter.chapter.toDomainChapter()!!,
-                priority = TranslationService.PRIORITY_AHEAD,
-            )
-        }
-    }
-
-    /**
-     * Get the current target translation language.
-     */
-    fun getTargetTranslationLanguage(): String {
-        return translationService.getLastTargetLanguage()
-    }
-
-    /**
-     * Set the target translation language.
-     */
-    fun setTargetTranslationLanguage(language: String) {
-        translationService.setTargetLanguage(language)
-    }
-
-    /** Whether a cached translation exists for [chapterId] in the current target language. */
-    suspend fun hasCachedTranslation(chapterId: Long): Boolean {
-        return translationService.hasTranslation(chapterId)
-    }
-
-    /**
-     * Translate text content using the translation service.
-     */
-    suspend fun translateContent(content: String, overrideChapterId: Long? = null): String {
-        val chapter = getCurrentChapter()
-        val chapterId = overrideChapterId ?: chapter?.chapter?.id
-        val mangaId = manga?.id
-
-        if (translationPreferences.smartAutoTranslate().get()) {
-            val detected = translationService.detectLanguage(content, mangaId)
-            val target = translationPreferences.targetLanguage().get()
-
-            logcat(LogPriority.DEBUG) {
-                "translateContent: smartAutoTranslate detected=$detected target=$target chapterId=$chapterId"
-            }
-
-            if (detected != null && detected.equals(target, ignoreCase = true)) {
-                logcat(LogPriority.DEBUG) { "translateContent: skipping — source lang matches target ($detected)" }
-                return content
-            }
-        }
-        return translationService.translateChapterContent(
-            content = content,
-            chapterId = chapterId,
-            mangaId = mangaId,
-        )
-    }
-
-    /**
      * Returns the viewer position used by this manga or the default one.
      * For novel sources, always returns NOVEL mode.
      */
@@ -1299,10 +1118,6 @@ class ReaderViewModel @JvmOverloads constructor(
 
     fun openSettingsDialog() {
         mutableState.update { it.copy(dialog = Dialog.Settings) }
-    }
-
-    fun openTranslationLanguageDialog() {
-        mutableState.update { it.copy(dialog = Dialog.TranslationLanguageSelect) }
     }
 
     fun closeDialog() {
@@ -1492,11 +1307,6 @@ class ReaderViewModel @JvmOverloads constructor(
          * Current reading progress for novel viewer (0-100 percentage).
          */
         val novelProgressPercent: Int = 0,
-
-        /**
-         * Whether translation is enabled for the current chapter.
-         */
-        val isTranslating: Boolean = false,
 
         /**
          * Viewer used to display the pages (pager, webtoon, ...).
@@ -1709,14 +1519,12 @@ class ReaderViewModel @JvmOverloads constructor(
         data object Settings : Dialog
         data object ReadingModeSelect : Dialog
         data object OrientationModeSelect : Dialog
-        data object TranslationLanguageSelect : Dialog
         data class PageActions(val page: ReaderPage) : Dialog
     }
 
     sealed interface Event {
         data object ReloadViewerChapters : Event
         data object PageChanged : Event
-        data object ReloadWithTranslation : Event
         data class SetOrientation(val orientation: Int) : Event
         data class SetCoverResult(val result: SetAsCoverResult) : Event
 

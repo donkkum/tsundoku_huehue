@@ -18,7 +18,6 @@
     <string name="label_novel_sources">Novel Sources</string>
     <string name="label_manga">Manga</string>
     <string name="label_novels">Novels</string>
-    <string name="label_translations">Translations</string>
     <string name="label_migration">Migrate Manga</string>
     <string name="label_novel_migration">Migrate Novels</string>
     <string name="label_manga_extensions">Manga Extensions</string>
@@ -73,7 +72,6 @@
 
     <!-- Notification channels -->
     <string name="channel_mass_import">Mass Import</string>
-    <string name="channel_translation">Translation</string>
     <string name="mass_import_progress_title">Mass Import Progress</string>
     <string name="mass_import_complete_title">Mass Import Complete</string>
 
@@ -182,32 +180,6 @@
     <string name="action_edit_appbar">Edit Bottom Bar</string>
     <string name="action_scroll_to_top">Scroll to top</string>
     <string name="action_scroll_to_bottom">Scroll to bottom</string>
-    <string name="action_translate">Translate</string>
-    <string name="action_translate_downloaded">Translate downloaded chapters</string>
-    <string name="action_retranslate">Retranslate</string>
-    <string name="translation_smart_auto">Smart Auto-Translate</string>
-    <string name="translation_smart_auto_summary">Only translate if language differs from target</string>
-    <string name="translation_select_target_language">Select target language for translation</string>
-    <string name="translation_job_translating">Translating chapters…</string>
-    <string name="translation_job_processing">Processing…</string>
-    <string name="translation_job_complete">Translation Complete</string>
-    <string name="translation_job_complete_count">%d chapters translated</string>
-    <string name="action_delete_translation">Delete translation</string>
-    <string name="translated_chapters">Translated chapters</string>
-    <!-- Translate manga details dialog -->
-    <string name="translate_details_title">Translate Details</string>
-    <string name="translate_details_no_engine">No translation engine configured. Please configure one in Settings &gt; Translation.</string>
-    <string name="translate_details_translating">Translating…</string>
-    <string name="translate_details_original_title">Original Title:</string>
-    <string name="translate_details_translated_title">Translated Title:</string>
-    <string name="translate_details_add_alt_titles">Add translated title to alternative titles</string>
-    <string name="translate_details_save_tags_notes">Save translated tags to notes</string>
-    <string name="translate_details_original_desc">Original Description:</string>
-    <string name="translate_details_translated_desc">Translated Description:</string>
-    <string name="translate_details_original_genres">Original Genres:</string>
-    <string name="translate_details_translated_genres">Translated Genres:</string>
-    <string name="translate_details_save_genres">Save translated genres</string>
-    <string name="translate_details_merge_genres">Add to existing genres (don\'t replace)</string>
     <string name="action_export_epub">Export as EPUB</string>
     <string name="action_export_epub_bulk">Export selected as EPUB</string>
     <string name="export_epub_progress">Exporting %1$d of %2$d chapters…</string>
@@ -222,14 +194,6 @@
     <string name="action_stop_auto_scroll">Stop auto-scroll</string>
     <string name="action_copy_links">Copy links</string>
     <string name="action_mass_import">Mass import</string>
-
-    <!-- Novel Translation Settings (reader panel) -->
-    <string name="pref_novel_translation_settings">Translation</string>
-    <string name="pref_novel_translation_enabled">Enable translation</string>
-    <string name="pref_novel_realtime_translation">Real-time translation</string>
-    <string name="pref_novel_translation_engine_label">Engine</string>
-    <string name="pref_novel_translation_target_label">Target language</string>
-    <string name="pref_novel_translation_hint">Configure translation engine and API keys in Settings &#x2192; Translation</string>
 
     <!-- Novel Download Settings -->
     <string name="pref_novel_reader_summary">Novel reading mode, fonts, colors</string>
@@ -356,13 +320,6 @@
     <string name="epub_content_options">Content Options</string>
     <string name="epub_downloaded_only">Downloaded chapters only</string>
     <string name="epub_join_volumes">Join EPUB volumes into one file</string>
-    <string name="epub_prefer_translated">Prefer translated chapters</string>
-    <string name="epub_translation_mode">Translation</string>
-    <string name="epub_translation_original">Original only</string>
-    <string name="epub_translation_translated">Translated only</string>
-    <string name="epub_translation_both">Both (two separate files)</string>
-    <string name="epub_translation_translated_info">Only chapters with translations will be included.</string>
-    <string name="epub_translation_both_info">Two EPUB files will be created — one original, one translated.</string>
     <string name="epub_filename_options">Filename Options</string>
     <string name="epub_include_chapter_count">Include chapter count (e.g. [50ch])</string>
     <string name="epub_include_chapter_range">Include chapter range (e.g. [ch1-50])</string>
@@ -374,7 +331,6 @@
     <string name="epub_include_custom_assets_info">Bundles your enabled CSS/JS snippets.</string>
     <string name="epub_downloaded_only_info">Only downloaded chapters will be included.</string>
     <string name="epub_source_info">Downloaded chapters will be used. Undownloaded chapters will be fetched from source.</string>
-    <string name="epub_translated_info"> Translated chapters will be used when available.</string>
     <string name="epub_action_import">Import</string>
     <string name="epub_export_job_title">EPUB Export</string>
     <string name="epub_export_job_starting">Starting…</string>
@@ -384,7 +340,7 @@
     <string name="epub_export_job_complete_with_skipped">Exported %1$d novel(s), %2$d skipped</string>
     <string name="epub_export_job_failed_title">EPUB Export Failed</string>
     <string name="epub_export_job_error_no_novels">No novels found to export</string>
-    <string name="epub_export_job_error_no_files">No novels could be exported. Check chapter availability (downloaded, local, or translated).</string>
+    <string name="epub_export_job_error_no_files">No novels could be exported. Check chapter availability (downloaded or local).</string>
     <string name="epub_export_job_error_write_output">Failed to write to output file</string>
     <string name="epub_export_job_error_unknown">Unknown error</string>
 
@@ -491,14 +447,6 @@
     <string name="novel_add_js_snippet">Add JavaScript snippet</string>
     <string name="novel_edit_js_snippet">Edit JavaScript snippet</string>
 
-    <!-- Translation Settings -->
-    <string name="pref_novel_translation_settings">Translation</string>
-    <string name="pref_novel_translation_enabled">Enable translation</string>
-    <string name="pref_novel_realtime_translation">Real-time translation while reading</string>
-    <string name="pref_novel_translation_engine_label">Engine</string>
-    <string name="pref_novel_translation_target_label">Target language</string>
-    <string name="pref_novel_translation_hint">Configure translation engines in Settings → Novel → Translation</string>
-    <string name="action_disable_translation">Disable translation</string>
     <string name="not_configured">Not configured</string>
 
     <!-- Novel Reader Preferences -->
@@ -552,39 +500,9 @@
     <!-- Novel Image Embedding (category header only) -->
     <string name="pref_category_novel_images">Chapter Images</string>
 
-    <!-- Translation Services -->
-    <string name="pref_category_translation">Translation</string>
-    <string name="pref_translation_general">General</string>
-    <string name="pref_translation_enabled">Enable translation</string>
-    <string name="pref_translation_enabled_summary">Allow translating novel chapters</string>
-    <string name="pref_translation_engine">Translation engine</string>
-    <string name="pref_translation_source_language">Source language</string>
-    <string name="pref_translation_target_language">Target language</string>
-    <string name="pref_translation_auto_download">Auto-download before translating</string>
-    <string name="pref_translation_auto_download_summary">Download chapter content if not already available</string>
-    <string name="pref_translation_auto_translate">Auto-translate downloads</string>
-    <string name="pref_translation_auto_translate_summary">Automatically translate chapters when downloaded</string>
-    <string name="pref_translation_rate_limit">Rate Limiting</string>
-    <string name="pref_translation_rate_limit_delay">Delay between requests</string>
-    <string name="pref_translation_rate_limit_delay_summary">Wait time between translation requests (ms)</string>
-    <string name="pref_translation_timeout">Request timeout</string>
-    <string name="pref_translation_timeout_summary">Maximum time to wait for translation response (seconds)</string>
-    <string name="pref_translation_warning_threshold">Warning threshold</string>
-    <string name="pref_translation_warning_threshold_summary">Show warning when translating more than this many chapters</string>
-    <string name="pref_translation_bypass_warning">Bypass rate limit warning</string>
-    <string name="pref_translation_bypass_warning_summary">Don\'t show warning for large batch translations</string>
-    <string name="pref_translation_max_parallel">Max parallel translations</string>
-    <string name="pref_translation_max_parallel_summary">For offline engines only</string>
-    <string name="pref_translation_api_keys">API Configuration</string>
-    <string name="pref_translation_openai_key">OpenAI API key</string>
-    <string name="pref_translation_deepseek_key">DeepSeek API key</string>
-    <string name="pref_translation_libretranslate_url">LibreTranslate server URL</string>
-    <string name="pref_translation_ollama_url">Ollama server URL</string>
-    <string name="pref_translation_ollama_model">Ollama model name</string>
     <string name="not_set">Not set</string>
     <string name="no_limit">No limit</string>
     <string name="no_downloaded_chapters">No downloaded chapters found</string>
-    <string name="translation_queued">Queued %d chapters for translation</string>
 
     <!-- Custom Source - Create dialog hint -->
     <string name="custom_source_use_repos_hint">For pre-built novel source themes (Madara, LightNovelWP, etc.), install extensions from a repository instead.</string>
@@ -770,38 +688,6 @@
     <string name="custom_selector_css_selector">CSS Selector</string>
     <string name="custom_selector_save_custom_source">Save Custom Source</string>
     <string name="custom_selector_source_name_required">Source Name *</string>
-    <!-- Translation UI strings -->
-    <string name="action_retranslate">Retranslate</string>
-    <string name="action_delete_translation">Delete translation</string>
-    <string name="translation_smart_auto">Smart Auto-Translate</string>
-    <string name="translation_smart_auto_summary">Only translate if language differs from target</string>
-    <string name="translation_select_target_language">Select target language for translation</string>
-    <string name="translate_details_title">Translate Details</string>
-    <string name="translate_details_no_engine">No translation engine configured. Please configure one in Settings &gt; Translation.</string>
-    <string name="translate_details_translating">Translating&#8230;</string>
-    <string name="translate_details_original_title">Original Title:</string>
-    <string name="translate_details_translated_title">Translated Title:</string>
-    <string name="translate_details_add_alt_titles">Add translated title to alternative titles</string>
-    <string name="translate_details_save_tags_notes">Save translated tags to notes</string>
-    <string name="translate_details_original_desc">Original Description:</string>
-    <string name="translate_details_translated_desc">Translated Description:</string>
-    <string name="translate_details_original_genres">Original Genres:</string>
-    <string name="translate_details_translated_genres">Translated Genres:</string>
-    <string name="translate_details_save_genres">Save translated genres</string>
-    <string name="translate_details_merge_genres">Add to existing genres (don\'t replace)</string>
-    <!-- EPUB translation mode strings -->
-    <string name="epub_translation_mode">Translation</string>
-    <string name="epub_translation_original">Original only</string>
-    <string name="epub_translation_translated">Translated only</string>
-    <string name="epub_translation_both">Both (two separate files)</string>
-    <string name="epub_translation_translated_info">Only chapters with translations will be included.</string>
-    <string name="epub_translation_both_info">Two EPUB files will be created &#8212; one original, one translated.</string>
-    <!-- Translation notifications -->
-    <string name="channel_translation">Translation</string>
-    <string name="translation_job_translating">Translating chapters&#8230;</string>
-    <string name="translation_job_processing">Processing&#8230;</string>
-    <string name="translation_job_complete">Translation Complete</string>
-    <string name="translation_job_complete_count">%d chapters translated</string>
 
     <!-- Batch update -->
     <string name="update_selected_title">Update selected</string>
@@ -872,9 +758,6 @@
     <string name="quotes_copy">Copy</string>
     <string name="quotes_append_clipboard">Append Clipboard</string>
     <string name="novel_chapter_loading">Loading…</string>
-    <string name="novel_chapter_translating">Translating…</string>
-    <string name="novel_chapter_translating_from_api">Translating from API…</string>
-    <string name="novel_chapter_translating_from_cache">Loading translation from downloads…</string>
     <string name="novel_chapter_next">Next Chapter →</string>
     <string name="novel_chapter_error">Error loading chapter: %s</string>
     <string name="novel_error_copy_details">Copy error details</string>

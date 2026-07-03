@@ -7,7 +7,6 @@ enum class BottomBarItem(val id: String) {
     PREV_CHAPTER("prev_chapter"),
     NEXT_CHAPTER("next_chapter"),
     SCROLL_TO_TOP("scroll_to_top"),
-    TRANSLATE("translate"),
     AUTO_SCROLL("auto_scroll"),
     ORIENTATION("orientation"),
     SETTINGS("settings"),
@@ -26,7 +25,6 @@ data class BottomBarItemState(
 val DefaultBottomBarItems = listOf(
     BottomBarItemState(BottomBarItem.PREV_CHAPTER, defaultEnabled = true),
     BottomBarItemState(BottomBarItem.SCROLL_TO_TOP, defaultEnabled = true),
-    BottomBarItemState(BottomBarItem.TRANSLATE, defaultEnabled = false),
     BottomBarItemState(BottomBarItem.AUTO_SCROLL, defaultEnabled = false),
     BottomBarItemState(BottomBarItem.QUOTES, defaultEnabled = true),
     BottomBarItemState(BottomBarItem.ORIENTATION, defaultEnabled = false),

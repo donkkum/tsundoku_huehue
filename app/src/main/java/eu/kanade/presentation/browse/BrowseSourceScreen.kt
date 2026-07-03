@@ -56,9 +56,6 @@ fun BrowseSourceContent(
     onMangaLongClick: (Manga) -> Unit,
     selectionMode: Boolean = false,
     selection: Set<Manga> = emptySet(),
-    translateTitles: Boolean = false,
-    translatedTitles: Map<Long, String> = emptyMap(),
-    onTranslateManga: (Manga) -> Unit = {},
     titleMaxLines: Int = 2,
     skipCoverLoading: Boolean = false,
 ) {
@@ -144,9 +141,6 @@ fun BrowseSourceContent(
         return
     }
 
-    // Track items that have been submitted for translation to prevent duplicates
-    // Not needed anymore as we use onMangaVisible and check in Model
-
     when (displayMode) {
         LibraryDisplayMode.ComfortableGrid -> {
             BrowseSourceComfortableGrid(
@@ -157,9 +151,6 @@ fun BrowseSourceContent(
                 onMangaLongClick = onMangaLongClick,
                 selectionMode = selectionMode,
                 selection = selection,
-                translateTitles = translateTitles,
-                translatedTitles = translatedTitles,
-                onMangaVisible = onTranslateManga,
                 titleMaxLines = titleMaxLines,
                 skipCoverLoading = skipCoverLoading,
             )
@@ -172,9 +163,6 @@ fun BrowseSourceContent(
                 onMangaLongClick = onMangaLongClick,
                 selectionMode = selectionMode,
                 selection = selection,
-                translateTitles = translateTitles,
-                translatedTitles = translatedTitles,
-                onMangaVisible = onTranslateManga,
                 titleMaxLines = titleMaxLines,
                 skipCoverLoading = skipCoverLoading,
             )
@@ -188,9 +176,6 @@ fun BrowseSourceContent(
                 onMangaLongClick = onMangaLongClick,
                 selectionMode = selectionMode,
                 selection = selection,
-                translateTitles = translateTitles,
-                translatedTitles = translatedTitles,
-                onMangaVisible = onTranslateManga,
                 titleMaxLines = titleMaxLines,
                 skipCoverLoading = skipCoverLoading,
             )

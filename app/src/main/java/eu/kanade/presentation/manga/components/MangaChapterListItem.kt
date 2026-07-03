@@ -17,7 +17,6 @@ import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.FileDownloadOff
 import androidx.compose.material.icons.outlined.RemoveDone
-import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -55,7 +54,6 @@ fun MangaChapterListItem(
     scanlator: String?,
     read: Boolean,
     bookmark: Boolean,
-    hasTranslation: Boolean,
     selected: Boolean,
     downloadIndicatorEnabled: Boolean,
     downloadStateProvider: () -> Download.State,
@@ -127,15 +125,6 @@ fun MangaChapterListItem(
                             modifier = Modifier
                                 .sizeIn(maxHeight = with(LocalDensity.current) { textHeight.toDp() - 2.dp }),
                             tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                    if (hasTranslation) {
-                        Icon(
-                            imageVector = Icons.Outlined.Translate,
-                            contentDescription = stringResource(TDMR.strings.action_translate),
-                            modifier = Modifier
-                                .sizeIn(maxHeight = with(LocalDensity.current) { textHeight.toDp() - 2.dp }),
-                            tint = MaterialTheme.colorScheme.tertiary,
                         )
                     }
                     Text(

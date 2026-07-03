@@ -108,7 +108,6 @@ import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.manga.interactor.ResetViewerFlags
 import tachiyomi.domain.manga.model.MangaUpdate
 import tachiyomi.domain.manga.repository.MangaRepository
-import tachiyomi.domain.translation.repository.TranslatedChapterRepository
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.novel.TDMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -253,7 +252,6 @@ object SettingsAdvancedScreen : SearchableSettings {
         val navigator = LocalNavigator.currentOrThrow
         val scope = rememberCoroutineScope()
         val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
-        var showDeleteTranslationsDialog by remember { mutableStateOf(false) }
         var showNormalizeUrlsDialog by remember { mutableStateOf(false) }
         var showRemoveDuplicatesDialog by remember { mutableStateOf(false) }
         var removeDoubleSlashes by remember { mutableStateOf(true) }
@@ -272,33 +270,6 @@ object SettingsAdvancedScreen : SearchableSettings {
             }
         }
 
-        if (showDeleteTranslationsDialog) {
-            AlertDialog(
-                onDismissRequest = { showDeleteTranslationsDialog = false },
-                title = { Text(text = stringResource(MR.strings.pref_delete_all_translations)) },
-                text = {
-                    Text(text = stringResource(MR.strings.pref_delete_all_translations_confirm))
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            scope.launch {
-                                Injekt.get<TranslatedChapterRepository>().deleteAll()
-                                context.toast(MR.strings.pref_all_translations_deleted)
-                                showDeleteTranslationsDialog = false
-                            }
-                        },
-                    ) {
-                        Text(text = stringResource(MR.strings.action_delete))
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showDeleteTranslationsDialog = false }) {
-                        Text(text = stringResource(MR.strings.action_cancel))
-                    }
-                },
-            )
-        }
 
         if (showResetSettingsDialog) {
             AlertDialog(
@@ -1209,11 +1180,6 @@ object SettingsAdvancedScreen : SearchableSettings {
                     onClick = { showRemoveDuplicatesDialog = true },
                 ),
                 Preference.PreferenceItem.TextPreference(
-                    title = stringResource(MR.strings.pref_delete_all_translations),
-                    subtitle = stringResource(MR.strings.pref_delete_all_translations_subtitle),
-                    onClick = { showDeleteTranslationsDialog = true },
-                ),
-                Preference.PreferenceItem.TextPreference(
                     title = stringResource(MR.strings.pref_clear_temp_files),
                     subtitle = stringResource(MR.strings.pref_clear_temp_files_subtitle),
                     onClick = {
@@ -1254,12 +1220,6 @@ object SettingsAdvancedScreen : SearchableSettings {
                                     clearedSize += it.length()
                                     it.delete()
                                 }
-
-                                // Clear translation temp (.tmp) files
-                                try {
-                                    val translationRepo = Injekt.get<TranslatedChapterRepository>()
-                                    clearedSize += translationRepo.clearTmpFiles()
-                                } catch (_: Exception) { }
 
                                 val sizeString = when {
                                     clearedSize >= 1024 * 1024 -> "%.2f MB".format(clearedSize / (1024.0 * 1024.0))

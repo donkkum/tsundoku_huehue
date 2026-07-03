@@ -45,7 +45,6 @@ import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Stop
-import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.VerticalAlignTop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -128,10 +127,6 @@ fun NovelReaderAppBars(
     onScrollToTop: () -> Unit,
     isAutoScrolling: Boolean,
     onToggleAutoScroll: () -> Unit,
-    isTranslating: Boolean,
-    onToggleTranslation: () -> Unit,
-    onLongPressTranslation: () -> Unit,
-    onRetranslate: (() -> Unit)? = null,
 
     isEditing: Boolean = false,
     onToggleEdit: () -> Unit = {},
@@ -169,7 +164,6 @@ fun NovelReaderAppBars(
                     onReloadLocal = onReloadLocal,
                     onReloadSource = onReloadSource,
                     onEditBottomBar = onEditBottomBar,
-                    onRetranslate = onRetranslate,
                 )
             }
 
@@ -246,9 +240,6 @@ fun NovelReaderAppBars(
                         onScrollToTop = onScrollToTop,
                         isAutoScrolling = isAutoScrolling,
                         onToggleAutoScroll = onToggleAutoScroll,
-                        isTranslating = isTranslating,
-                        onToggleTranslation = onToggleTranslation,
-                        onLongPressTranslation = onLongPressTranslation,
                         isEditing = isEditing,
                         isWebView = isWebView,
                         onToggleEdit = onToggleEdit,
@@ -273,7 +264,6 @@ private fun NovelReaderTopBar(
     onReloadLocal: () -> Unit,
     onReloadSource: () -> Unit,
     onEditBottomBar: () -> Unit,
-    onRetranslate: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     AppBar(
@@ -344,14 +334,6 @@ private fun NovelReaderTopBar(
                             ),
                         )
                     }
-                    onRetranslate?.let {
-                        add(
-                            AppBar.OverflowAction(
-                                title = stringResource(TDMR.strings.action_retranslate),
-                                onClick = it,
-                            ),
-                        )
-                    }
                 },
             )
         },
@@ -372,9 +354,6 @@ private fun NovelReaderBottomBar(
     onScrollToTop: () -> Unit,
     isAutoScrolling: Boolean,
     onToggleAutoScroll: () -> Unit,
-    isTranslating: Boolean,
-    onToggleTranslation: () -> Unit,
-    onLongPressTranslation: () -> Unit,
     isEditing: Boolean,
     isWebView: Boolean,
     onToggleEdit: () -> Unit,
@@ -433,34 +412,6 @@ private fun NovelReaderBottomBar(
                             contentDescription = stringResource(TDMR.strings.action_scroll_to_top),
                             modifier = Modifier.size(iconSize),
                         )
-                    }
-
-                    // Translation toggle - tap for quick translate, long-press for language picker
-                    BottomBarItem.TRANSLATE -> androidx.compose.material3.Surface(
-                        modifier = Modifier
-                            .size(buttonSize)
-                            .padding(paddingSize),
-                        shape = MaterialTheme.shapes.small,
-                        color = if (isTranslating) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
-                    ) {
-                        Box(
-                            modifier = Modifier.combinedClickable(
-                                onClick = onToggleTranslation,
-                                onLongClick = onLongPressTranslation,
-                            ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Translate,
-                                contentDescription = stringResource(TDMR.strings.action_translate),
-                                tint = if (isTranslating) {
-                                    MaterialTheme.colorScheme.onSecondaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                },
-                                modifier = Modifier.size(iconSize),
-                            )
-                        }
                     }
 
                     // Auto-scroll toggle
@@ -559,7 +510,6 @@ internal fun bottomBarItemInfo(
         Icons.AutoMirrored.Outlined.NavigateNext to
             stringResource(MR.strings.action_next_chapter)
     BottomBarItem.SCROLL_TO_TOP -> Icons.Outlined.VerticalAlignTop to stringResource(TDMR.strings.action_scroll_to_top)
-    BottomBarItem.TRANSLATE -> Icons.Outlined.Translate to stringResource(TDMR.strings.action_translate)
     BottomBarItem.AUTO_SCROLL -> Icons.Outlined.PlayArrow to stringResource(TDMR.strings.action_start_auto_scroll)
     BottomBarItem.QUOTES -> Icons.Outlined.FormatQuote to stringResource(TDMR.strings.action_quotes)
     BottomBarItem.ORIENTATION -> orientation.icon to stringResource(MR.strings.rotation_type)

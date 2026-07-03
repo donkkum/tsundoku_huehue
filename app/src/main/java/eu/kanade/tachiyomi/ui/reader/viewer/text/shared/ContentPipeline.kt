@@ -5,18 +5,17 @@ import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 
 /**
  * Order (kept stable — changing it changes user-visible output for some chapters):
- * stripChapterTitle → normalize → regex replacements → forceLowercase → translate → sanitizeForRender.
+ * stripChapterTitle → normalize → regex replacements → forceLowercase → sanitizeForRender.
  */
 class ContentPipeline(private val preferences: ReaderPreferences) {
 
     suspend fun process(
         raw: String,
         config: ContentConfig,
-        translator: (suspend (String) -> String)? = null,
-    ): ProcessedContent = finalize(preTranslate(raw, config), config, translator)
+    ): ProcessedContent = finalize(preProcess(raw, config), config)
 
     @WorkerThread
-    fun preTranslate(raw: String, config: ContentConfig): PreTranslated {
+    fun preProcess(raw: String, config: ContentConfig): PreProcessed {
         var content = raw
         val plainTextMode = HtmlUtils.isPlainTextChapter(config.chapterUrl)
 
@@ -34,16 +33,14 @@ class ContentPipeline(private val preferences: ReaderPreferences) {
 
         if (config.forceLowercase) content = content.lowercase()
 
-        return PreTranslated(content, plainTextMode)
+        return PreProcessed(content, plainTextMode)
     }
 
     suspend fun finalize(
-        pre: PreTranslated,
+        pre: PreProcessed,
         config: ContentConfig,
-        translator: (suspend (String) -> String)? = null,
     ): ProcessedContent {
         var content = pre.text
-        if (translator != null) content = translator(content)
 
         if (!pre.isPlainText) {
             content = HtmlUtils.sanitizeForRender(
@@ -62,7 +59,7 @@ class ContentPipeline(private val preferences: ReaderPreferences) {
         )
     }
 
-    data class PreTranslated(
+    data class PreProcessed(
         val text: String,
         val isPlainText: Boolean,
     )

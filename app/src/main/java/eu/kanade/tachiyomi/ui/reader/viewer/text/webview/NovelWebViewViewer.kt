@@ -550,7 +550,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) : Viewer {
 
     override fun getView(): View = container
 
-    fun reloadWithTranslation() {
+    fun reloadContent() {
         val page = currentPage ?: return
         val chapter = currentChapters?.currChapter ?: return
         val content = page.text ?: return
@@ -561,20 +561,9 @@ class NovelWebViewViewer(val activity: ReaderActivity) : Viewer {
             chapter.chapter.name,
         )
 
-        if (activity.isTranslationEnabled()) {
-            loadingIndicator?.show()
-            scope.launch {
-                val processed = withContext(Dispatchers.Default) {
-                    contentPipeline.process(content, cfg) { activity.translateContentIfEnabled(it) }
-                }
-                loadingIndicator?.hide()
-                loadHtmlContent(processed, chapter)
-            }
-        } else {
-            scope.launch {
-                val processed = withContext(Dispatchers.Default) { contentPipeline.process(content, cfg) }
-                loadHtmlContent(processed, chapter)
-            }
+        scope.launch {
+            val processed = withContext(Dispatchers.Default) { contentPipeline.process(content, cfg) }
+            loadHtmlContent(processed, chapter)
         }
     }
 
@@ -658,10 +647,6 @@ class NovelWebViewViewer(val activity: ReaderActivity) : Viewer {
             return
         }
 
-        val chapterId = chapter.chapter.id ?: return
-
-        val translator: (suspend (String) -> String)? =
-            if (activity.isTranslationEnabled()) { c -> activity.translateContentIfEnabled(c, chapterId) } else null
         val cfg = ContentConfig.from(
             preferences,
             RenderTarget.WEB_VIEW,
@@ -670,18 +655,10 @@ class NovelWebViewViewer(val activity: ReaderActivity) : Viewer {
         )
 
         scope.launch {
-            if (!isAppendOrPrepend && translator != null) {
-                val labelRes = if (activity.hasCachedTranslation(chapterId)) {
-                    TDMR.strings.novel_chapter_translating_from_cache
-                } else {
-                    TDMR.strings.novel_chapter_translating_from_api
-                }
-                showLoadingIndicator(activity.stringResource(labelRes))
-            }
-
             val processed = withContext(Dispatchers.Default) {
-                contentPipeline.process(rawContent, cfg, translator)
+                contentPipeline.process(rawContent, cfg)
             }
+            val chapterId = chapter.chapter.id ?: -1L
 
             // For infinite-scroll appends/prepends, prefix every tsundoku-novel-image://
             // URL with the chapter ID so that shouldInterceptRequest can resolve the
@@ -1371,10 +1348,8 @@ class NovelWebViewViewer(val activity: ReaderActivity) : Viewer {
             chapter.chapter.url,
             chapter.chapter.name,
         )
-        val translator: (suspend (String) -> String)? =
-            if (activity.isTranslationEnabled()) { c -> activity.translateContentIfEnabled(c, chapterId) } else null
         val processed = withContext(Dispatchers.Default) {
-            contentPipeline.process(rawContent, cfg, translator)
+            contentPipeline.process(rawContent, cfg)
         }
         imageCache.schedulePrefetch(processed.text, chapterId, page.chapter.pageLoader)
 

@@ -8,7 +8,6 @@ import android.text.Spanned
 import android.widget.TextView
 import androidx.core.text.PrecomputedTextCompat
 import androidx.core.widget.TextViewCompat
-import eu.kanade.tachiyomi.data.translation.TranslationHtmlUtils
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.viewer.text.shared.ProcessedContent
@@ -31,13 +30,7 @@ internal class NovelTextRenderer(
         val rawHtmlMode = preferences.novelShowRawHtml.get()
         val plainTextMode = rawHtmlMode || processed.isPlainText
 
-        var processedContent = if (!rawHtmlMode && processed.isPlainText &&
-            TranslationHtmlUtils.hasSourceHashTag(processed.text)
-        ) {
-            TranslationHtmlUtils.extractTextFromHtml(processed.text)
-        } else {
-            processed.text
-        }
+        var processedContent = processed.text
 
         if (!plainTextMode) {
             processedContent = wrapParagraphs(processedContent)

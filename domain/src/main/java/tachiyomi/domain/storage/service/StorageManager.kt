@@ -44,7 +44,6 @@ class StorageManager(
                         DiskUtil.createNoMediaFile(it, context)
                     }
                     getOrCreateDirectory(parent, FONTS_PATH)
-                    getOrCreateDirectory(parent, TRANSLATIONS_PATH)
                     getOrCreateDirectory(parent, DOWNLOADS_PATH).also {
                         DiskUtil.createNoMediaFile(it, context)
                     }
@@ -91,10 +90,6 @@ class StorageManager(
         return getOrCreateDirectory(baseDir, FONTS_PATH)
     }
 
-    fun getTranslationsDirectory(): UniFile? {
-        return getOrCreateDirectory(baseDir, TRANSLATIONS_PATH)
-    }
-
     fun getMassImportDirectory(): UniFile? {
         return getOrCreateDirectory(baseDir, MASS_IMPORT_PATH)
     }
@@ -110,6 +105,5 @@ private const val LOCAL_SOURCE_PATH = "local"
 private const val LOCAL_NOVEL_SOURCE_PATH = "localnovels"
 private const val LNREADER_PLUGINS_PATH = "lnreader_plugins"
 private const val FONTS_PATH = "fonts"
-private const val TRANSLATIONS_PATH = "translations"
 private const val MASS_IMPORT_PATH = "mass_import"
 private const val QUOTES_PATH = "quotes"

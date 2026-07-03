@@ -60,7 +60,6 @@ import eu.kanade.presentation.reader.ReaderContentOverlay
 import eu.kanade.presentation.reader.ReaderPageActionsDialog
 import eu.kanade.presentation.reader.ReaderPageIndicator
 import eu.kanade.presentation.reader.ReadingModeSelectDialog
-import eu.kanade.presentation.reader.TranslationLanguageSelectDialog
 import eu.kanade.presentation.reader.appbars.BottomBarEditorSheet
 import eu.kanade.presentation.reader.appbars.BottomBarItem
 import eu.kanade.presentation.reader.appbars.NovelReaderAppBars
@@ -270,10 +269,6 @@ class ReaderActivity : BaseActivity() {
                     ReaderViewModel.Event.ReloadViewerChapters -> {
                         viewModel.state.value.viewerChapters?.let(::setChapters)
                     }
-                    ReaderViewModel.Event.ReloadWithTranslation -> {
-                        // Force reload content with new translation state
-                        reloadContentWithTranslation()
-                    }
                     ReaderViewModel.Event.PageChanged -> {
                         displayRefreshHost.flash()
                     }
@@ -300,7 +295,6 @@ class ReaderActivity : BaseActivity() {
     private fun ReaderActivityBinding.setComposeOverlay(): Unit = composeOverlay.setComposeContent {
         val state by viewModel.state.collectAsState()
         val showPageNumber by readerPreferences.showPageNumber.collectAsState()
-        val autoTranslateEnabled by readerPreferences.autoTranslate.collectAsState()
         val novelStatusBarEnabled by readerPreferences.novelStatusBarEnabled.collectAsState()
         val novelStatusBarShowTime by readerPreferences.novelStatusBarShowTime.collectAsState()
         val novelStatusBarShowBattery by readerPreferences.novelStatusBarShowBattery.collectAsState()
@@ -419,27 +413,6 @@ class ReaderActivity : BaseActivity() {
                     onChange = { stringRes ->
                         menuToggleToast?.cancel()
                         menuToggleToast = toast(stringRes)
-                    },
-                )
-            }
-            is ReaderViewModel.Dialog.TranslationLanguageSelect -> {
-                TranslationLanguageSelectDialog(
-                    onDismissRequest = onDismissRequest,
-                    currentLanguage = viewModel.getTargetTranslationLanguage(),
-                    autoTranslateEnabled = autoTranslateEnabled,
-                    onToggleAutoTranslate = { enabled ->
-                        readerPreferences.autoTranslate.set(enabled)
-                    },
-                    onSelectLanguage = { languageCode ->
-                        viewModel.setTargetTranslationLanguage(languageCode)
-                        // Optionally trigger translation with new language
-                        if (!viewModel.state.value.isTranslating) {
-                            viewModel.toggleTranslation()
-                        } else {
-                            // Retrigger translation with new language
-                            viewModel.toggleTranslation() // Turn off
-                            viewModel.toggleTranslation() // Turn on with new language
-                        }
                     },
                 )
             }
@@ -789,10 +762,6 @@ class ReaderActivity : BaseActivity() {
                 onScrollToTop = onScrollToTop,
                 isAutoScrolling = isAutoScrolling,
                 onToggleAutoScroll = onToggleAutoScroll,
-                isTranslating = state.isTranslating,
-                onToggleTranslation = viewModel::toggleTranslation,
-                onLongPressTranslation = viewModel::openTranslationLanguageDialog,
-                onRetranslate = if (state.isTranslating) viewModel::retranslateCurrentChapter else null,
 
                 isEditing = isEditing,
                 onToggleEdit = {
@@ -1189,63 +1158,6 @@ class ReaderActivity : BaseActivity() {
         }
     }
 
-    /**
-     * Check if translation mode is currently enabled.
-     */
-    fun isTranslationEnabled(): Boolean {
-        return viewModel.state.value.isTranslating
-    }
-
-    /** Whether a cached translation exists for [chapterId]; viewers use it to pick the loading label. */
-    suspend fun hasCachedTranslation(chapterId: Long?): Boolean {
-        if (chapterId == null || !isTranslationEnabled()) return false
-        return try {
-            viewModel.hasCachedTranslation(chapterId)
-        } catch (e: Exception) {
-            logcat(LogPriority.WARN, e) { "hasCachedTranslation lookup failed" }
-            false
-        }
-    }
-
-    /**
-     * Reload content with current translation state.
-     * Called when translation is toggled to re-render existing content.
-     */
-    private fun reloadContentWithTranslation() {
-        val state = viewModel.state.value
-        val viewer = state.viewer
-
-        when (viewer) {
-            is NovelViewer -> viewer.reloadWithTranslation()
-            is NovelWebViewViewer -> viewer.reloadWithTranslation()
-            else -> {
-                // For other viewers, just reload chapters
-                state.viewerChapters?.let(::setChapters)
-            }
-        }
-    }
-
-    /**
-     * Translate text content using the translation service.
-     * Returns translated text if translation is enabled and successful,
-     * otherwise returns original text.
-     */
-    suspend fun translateContentIfEnabled(content: String, chapterId: Long? = null): String {
-        if (!isTranslationEnabled()) return content
-        return try {
-            viewModel.translateContent(content, chapterId)
-        } catch (e: CancellationException) {
-            logcat(LogPriority.DEBUG) { "Translation was cancelled" }
-            content
-        } catch (e: Exception) {
-            logcat(LogPriority.ERROR, e) { "Translation failed" }
-            runOnUiThread {
-                viewModel.disableTranslation()
-                toast(e.message ?: "Translation failed")
-            }
-            content
-        }
-    }
 
     /**
      * Called from the presenter when a page is ready to be shared. It shows Android's default

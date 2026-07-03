@@ -45,8 +45,6 @@ fun MangaToolbar(
     onClickEditNotes: () -> Unit,
     onClickEdit: (() -> Unit)?,
     onClickClearCustomInfo: (() -> Unit)? = null,
-    onClickTranslate: (() -> Unit)? = null,
-    onClickTranslateDownloaded: (() -> Unit)? = null,
     onClickExportEpub: (() -> Unit)? = null,
     onClickScrollToTop: (() -> Unit)? = null,
     onClickScrollToLastRead: (() -> Unit)? = null,
@@ -211,22 +209,6 @@ fun MangaToolbar(
                             AppBar.OverflowAction(
                                 title = stringResource(MR.strings.action_share),
                                 onClick = onClickShare,
-                            ),
-                        )
-                    }
-                    if (onClickTranslate != null) {
-                        add(
-                            AppBar.OverflowAction(
-                                title = stringResource(TDMR.strings.action_translate),
-                                onClick = onClickTranslate,
-                            ),
-                        )
-                    }
-                    if (onClickTranslateDownloaded != null) {
-                        add(
-                            AppBar.OverflowAction(
-                                title = stringResource(TDMR.strings.action_translate_downloaded),
-                                onClick = onClickTranslateDownloaded,
                             ),
                         )
                     }

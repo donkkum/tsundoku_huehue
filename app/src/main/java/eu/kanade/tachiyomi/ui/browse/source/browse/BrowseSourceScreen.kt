@@ -18,7 +18,6 @@ import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.NewReleases
-import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -349,22 +348,6 @@ data class BrowseSourceScreen(
                                 },
                             )
                         }
-                        // Translation chip
-                        FilterChip(
-                            selected = state.translateTitles,
-                            onClick = screenModel::toggleTranslateTitles,
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Outlined.Translate,
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .size(FilterChipDefaults.IconSize),
-                                )
-                            },
-                            label = {
-                                Text(text = stringResource(TDMR.strings.action_translate))
-                            },
-                        )
                         // Multi-select chip for mass import
                         FilterChip(
                             selected = state.selectionMode,
@@ -492,9 +475,6 @@ data class BrowseSourceScreen(
                 onOpenFolderClick = onOpenFolderClick,
                 selectionMode = state.selectionMode,
                 selection = state.selection,
-                translateTitles = state.translateTitles,
-                translatedTitles = state.translatedTitles,
-                onTranslateManga = screenModel::translateManga,
                 onMangaClick = { manga ->
                     if (state.selectionMode) {
                         screenModel.toggleSelection(manga)

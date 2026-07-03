@@ -39,8 +39,6 @@ import eu.kanade.tachiyomi.data.download.model.Download
 import eu.kanade.tachiyomi.data.epub.EpubExportJob
 import eu.kanade.tachiyomi.data.track.EnhancedTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
-import eu.kanade.tachiyomi.data.translation.TranslationJob
-import eu.kanade.tachiyomi.data.translation.TranslationService
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.isNovelSource
@@ -97,7 +95,6 @@ import tachiyomi.domain.manga.repository.MangaRepository
 import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.domain.storage.service.StorageManager
 import tachiyomi.domain.track.interactor.GetTracks
-import tachiyomi.domain.translation.repository.TranslatedChapterRepository
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.novel.TDMR
 import tachiyomi.source.local.isLocal
@@ -140,8 +137,6 @@ class MangaScreenModel(
     private val storageManager: StorageManager = Injekt.get(),
     private val mangaRepository: MangaRepository = Injekt.get(),
     private val filterChaptersForDownload: FilterChaptersForDownload = Injekt.get(),
-    private val translatedChapterRepository: TranslatedChapterRepository = Injekt.get(),
-    private val translationService: TranslationService = Injekt.get(),
     private val getLibraryManga: GetLibraryManga = Injekt.get(),
     val snackbarHostState: SnackbarHostState = SnackbarHostState(),
 ) : StateScreenModel<MangaScreenModel.State>(State.Loading) {
@@ -202,20 +197,13 @@ class MangaScreenModel(
                 getMangaAndChapters.subscribe(mangaId, applyScanlatorFilter = true).distinctUntilChanged(),
                 downloadCache.changes,
                 downloadManager.queueState,
-                // Re-evaluate when translation progress changes (e.g. a chapter finishes translating)
-                translationService.progressState,
-            ) { mangaAndChapters, _, _, _ -> mangaAndChapters }
+            ) { mangaAndChapters, _, _ -> mangaAndChapters }
                 .flowWithLifecycle(lifecycle)
                 .collectLatest { (manga, chapters) ->
-                    val translatedChapterIds = translatedChapterRepository.getTranslatedChapterIds(
-                        chapters.map {
-                            it.id
-                        },
-                    )
                     updateSuccessState {
                         it.copy(
                             manga = manga,
-                            chapters = chapters.toChapterListItems(manga, translatedChapterIds),
+                            chapters = chapters.toChapterListItems(manga),
                         )
                     }
                 }
@@ -253,8 +241,7 @@ class MangaScreenModel(
 
             val manga = mangaDeferred.await()
             val chapters = chaptersDeferred.await()
-            val translatedChapterIds = translatedChapterRepository.getTranslatedChapterIds(chapters.map { it.id })
-            val chapterListItems = chapters.toChapterListItems(manga, translatedChapterIds)
+            val chapterListItems = chapters.toChapterListItems(manga)
 
             if (!manga.favorite) {
                 setMangaDefaultChapterFlags.await(manga)
@@ -724,7 +711,6 @@ class MangaScreenModel(
 
     private fun List<Chapter>.toChapterListItems(
         manga: Manga,
-        translatedChapterIds: Set<Long> = emptySet(),
     ): List<ChapterList.Item> {
         return map { chapter ->
             val isMangaLocal = manga.isLocal()
@@ -755,7 +741,6 @@ class MangaScreenModel(
                 downloadState = downloadState,
                 downloadProgress = activeDownload?.progress ?: 0,
                 selected = chapter.id in selectedChapterIds,
-                hasTranslation = chapter.id in translatedChapterIds,
             )
         }
     }
@@ -1335,7 +1320,6 @@ class MangaScreenModel(
         data class SetFetchInterval(val manga: Manga) : Dialog
         data class Edit(val manga: Manga) : Dialog
         data object ClearCustomInfo : Dialog
-        data class TranslateMangaDetails(val manga: Manga) : Dialog
         data class ExportEpub(val manga: Manga, val chapters: List<Chapter>) : Dialog
         data object SettingsSheet : Dialog
         data object TrackSheet : Dialog
@@ -1357,25 +1341,6 @@ class MangaScreenModel(
     fun removeChaptersFromDb(chapters: List<Chapter>) {
         screenModelScope.launchNonCancellable {
             removeChapters.await(chapters)
-        }
-    }
-
-    fun deleteTranslations(chapters: List<Chapter>) {
-        screenModelScope.launchNonCancellable {
-            val chapterIds = chapters.map { it.id }.toSet()
-            translatedChapterRepository.deleteAllForChapters(chapterIds)
-            // Update the UI to reflect that these chapters no longer have translations
-            updateSuccessState { state ->
-                state.copy(
-                    chapters = state.chapters.map { item ->
-                        if (item.chapter.id in chapterIds) {
-                            item.copy(hasTranslation = false)
-                        } else {
-                            item
-                        }
-                    },
-                )
-            }
         }
     }
 
@@ -1476,187 +1441,10 @@ class MangaScreenModel(
     fun showExportEpubDialog() {
         val manga = successState?.manga ?: return
         val chapterItems = successState?.chapters ?: return
-        // Only include chapters that are downloaded or have a translation
         val exportableChapters = chapterItems.filter {
-            it.downloadState == Download.State.DOWNLOADED || it.hasTranslation
+            it.downloadState == Download.State.DOWNLOADED
         }.map { it.chapter }
         updateSuccessState { it.copy(dialog = Dialog.ExportEpub(manga, exportableChapters)) }
-    }
-
-    /**
-     * Translate manga details (title, description, tags) and save translated title to alternative titles.
-     */
-    fun translateMangaDetails() {
-        val manga = successState?.manga ?: return
-        updateSuccessState { it.copy(dialog = Dialog.TranslateMangaDetails(manga)) }
-    }
-
-    fun applyTranslatedDetails(details: eu.kanade.presentation.manga.components.TranslatedMangaDetails) {
-        val manga = successState?.manga ?: return
-        screenModelScope.launchIO {
-            // Handle genres - merge or replace based on user preference
-            val finalGenres = when {
-                details.translatedGenres == null -> null
-                details.mergeGenres -> {
-                    val existingGenres = manga.genre ?: emptyList()
-                    (existingGenres + details.translatedGenres).distinct()
-                }
-                else -> details.translatedGenres
-            }
-
-            if (details.addToAltTitles && !details.translatedTitle.isNullOrBlank() &&
-                details.translatedTitle != manga.title
-            ) {
-                val currentAltTitles = manga.alternativeTitles.toMutableList()
-                if (!currentAltTitles.contains(details.translatedTitle)) {
-                    currentAltTitles.add(0, details.translatedTitle)
-                    updateManga.awaitUpdateAlternativeTitles(mangaId, currentAltTitles)
-                }
-            }
-
-            if (details.translatedDescription != null) {
-                updateManga.awaitUpdateDescription(mangaId, details.translatedDescription)
-            }
-
-            var newNotes = manga.notes
-            if (details.translatedDescription != null) {
-                val descBlock = "Translated Description:\n${details.translatedDescription}"
-                val descRegex = Regex("""Translated Description:\n[\s\S]*?(?=\n\nTranslated Tags:|$)""")
-                newNotes = if (newNotes.isBlank()) {
-                    descBlock
-                } else if (descRegex.containsMatchIn(newNotes)) {
-                    descRegex.replace(newNotes, descBlock)
-                } else {
-                    "$newNotes\n\n$descBlock"
-                }
-            }
-
-            if (details.saveTagsToNotes && !details.translatedGenres.isNullOrEmpty()) {
-                val tagsString = "Translated Tags: ${details.translatedGenres.joinToString(", ")}"
-                val tagsRegex = Regex("""Translated Tags:.*""")
-                newNotes = if (newNotes.isBlank()) {
-                    tagsString
-                } else if (tagsRegex.containsMatchIn(newNotes)) {
-                    tagsRegex.replace(newNotes, tagsString)
-                } else {
-                    "$newNotes\n\n$tagsString"
-                }
-            }
-
-            if (newNotes != manga.notes) {
-                updateManga.awaitUpdateNotes(mangaId, newNotes)
-            }
-
-            if (finalGenres != null && finalGenres.isNotEmpty()) {
-                updateManga.awaitUpdateGenre(mangaId, finalGenres)
-                getLibraryManga.applyMangaDetailUpdate(mangaId) { it.copy(genre = finalGenres) }
-            }
-        }
-
-        dismissDialog()
-    }
-
-    /**
-     * Queue all downloaded chapters for translation.
-     * @param forceRetranslate if true, retranslate even already-translated chapters.
-     */
-    fun translateDownloadedChapters(forceRetranslate: Boolean = false) {
-        val state = successState ?: return
-        val manga = state.manga
-
-        screenModelScope.launchIO {
-            // Get all downloaded chapters
-            val downloadedChapters = state.chapters.filter { item ->
-                item.downloadState == Download.State.DOWNLOADED
-            }.map { it.chapter }
-
-            if (downloadedChapters.isEmpty()) {
-                withUIContext {
-                    snackbarHostState.showSnackbar(
-                        context.stringResource(TDMR.strings.no_downloaded_chapters),
-                    )
-                }
-                return@launchIO
-            }
-
-            // Filter out already-translated chapters unless forcing
-            val chaptersToTranslate = if (forceRetranslate) {
-                downloadedChapters
-            } else {
-                val translatedIds = translatedChapterRepository.getTranslatedChapterIds(
-                    downloadedChapters.map {
-                        it.id
-                    },
-                )
-                downloadedChapters.filter { it.id !in translatedIds }
-            }
-
-            if (chaptersToTranslate.isEmpty()) {
-                withUIContext {
-                    snackbarHostState.showSnackbar(
-                        context.stringResource(MR.strings.translation_all_downloaded_already_translated),
-                    )
-                }
-                return@launchIO
-            }
-
-            // Queue chapters for translation
-            translationService.enqueueAll(
-                manga,
-                chaptersToTranslate,
-                TranslationService.PRIORITY_NORMAL,
-                forceRetranslate,
-            )
-
-            // Start background worker with notification
-            TranslationJob.start(context)
-
-            withUIContext {
-                snackbarHostState.showSnackbar(
-                    context.stringResource(TDMR.strings.translation_queued, chaptersToTranslate.size),
-                )
-            }
-        }
-    }
-
-    /**
-     * Queue selected chapters for translation.
-     */
-    fun translateSelectedChapters(chapters: List<Chapter>, forceRetranslate: Boolean = false) {
-        val state = successState ?: return
-        val manga = state.manga
-
-        screenModelScope.launchIO {
-            val chaptersToTranslate = if (forceRetranslate) {
-                chapters
-            } else {
-                val translatedIds = translatedChapterRepository.getTranslatedChapterIds(chapters.map { it.id })
-                chapters.filter { it.id !in translatedIds }
-            }
-
-            if (chaptersToTranslate.isEmpty()) {
-                withUIContext {
-                    snackbarHostState.showSnackbar(
-                        context.stringResource(MR.strings.translation_selected_already_translated),
-                    )
-                }
-                return@launchIO
-            }
-
-            translationService.enqueueAll(
-                manga,
-                chaptersToTranslate,
-                TranslationService.PRIORITY_NORMAL,
-                forceRetranslate,
-            )
-            TranslationJob.start(context)
-
-            withUIContext {
-                snackbarHostState.showSnackbar(
-                    context.stringResource(TDMR.strings.translation_queued, chaptersToTranslate.size),
-                )
-            }
-        }
     }
 
     /**
@@ -1676,7 +1464,6 @@ class MangaScreenModel(
             mangaIds = listOf(manga.id),
             outputUri = uri,
             downloadedOnly = options.downloadedOnly,
-            translationMode = options.translationMode,
             joinVolumes = options.joinVolumes,
             includeChapterCount = options.includeChapterCount,
             includeChapterRange = options.includeChapterRange,
@@ -1803,7 +1590,6 @@ sealed class ChapterList {
         val downloadState: Download.State,
         val downloadProgress: Int,
         val selected: Boolean = false,
-        val hasTranslation: Boolean = false,
     ) : ChapterList() {
         val id = chapter.id
         val isDownloaded = downloadState == Download.State.DOWNLOADED

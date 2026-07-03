@@ -85,13 +85,6 @@ object Notifications {
     const val ID_MASS_IMPORT_COMPLETE = -602
 
     /**
-     * Notification channel and ids used by translation.
-     */
-    const val CHANNEL_TRANSLATION = "translation_channel"
-    const val ID_TRANSLATION_PROGRESS = -610
-    const val ID_TRANSLATION_COMPLETE = -611
-
-    /**
      * Notification channel and ids used by EPUB export.
      */
     const val CHANNEL_EPUB_EXPORT = "epub_export_channel"
@@ -118,6 +111,13 @@ object Notifications {
     const val CHANNEL_DB_MAINTENANCE = "db_maintenance_channel"
     const val ID_DB_MAINTENANCE_PROGRESS = -901
     const val ID_DB_MAINTENANCE_COMPLETE = -902
+
+    /**
+     * Notification channel and ids used by restore-from-downloads.
+     */
+    const val CHANNEL_RESTORE_DOWNLOADS = "restore_downloads_channel"
+    const val ID_RESTORE_DOWNLOADS_PROGRESS = -1001
+    const val ID_RESTORE_DOWNLOADS_COMPLETE = -1002
 
     private val deprecatedChannels = listOf(
         "downloader_channel",
@@ -214,10 +214,6 @@ object Notifications {
                     setName(context.stringResource(TDMR.strings.channel_mass_import))
                     setShowBadge(false)
                 },
-                buildNotificationChannel(CHANNEL_TRANSLATION, IMPORTANCE_LOW) {
-                    setName(context.stringResource(TDMR.strings.channel_translation))
-                    setShowBadge(false)
-                },
                 buildNotificationChannel(CHANNEL_EPUB_EXPORT, IMPORTANCE_LOW) {
                     setName("EPUB Export")
                     setShowBadge(false)
@@ -231,6 +227,10 @@ object Notifications {
                 },
                 buildNotificationChannel(CHANNEL_DB_MAINTENANCE, IMPORTANCE_LOW) {
                     setName(context.stringResource(TDMR.strings.channel_db_maintenance))
+                    setShowBadge(false)
+                },
+                buildNotificationChannel(CHANNEL_RESTORE_DOWNLOADS, IMPORTANCE_LOW) {
+                    setName("Restore from Downloads")
                     setShowBadge(false)
                 },
             ),

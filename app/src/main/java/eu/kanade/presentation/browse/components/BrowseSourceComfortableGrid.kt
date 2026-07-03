@@ -27,9 +27,6 @@ fun BrowseSourceComfortableGrid(
     onMangaLongClick: (Manga) -> Unit,
     selectionMode: Boolean = false,
     selection: Set<Manga> = emptySet(),
-    translateTitles: Boolean = false,
-    translatedTitles: Map<Long, String> = emptyMap(),
-    onMangaVisible: (Manga) -> Unit = {},
     titleMaxLines: Int = 2,
     skipCoverLoading: Boolean = false,
 ) {
@@ -48,19 +45,10 @@ fun BrowseSourceComfortableGrid(
         items(count = mangaList.itemCount) { index ->
             val manga by mangaList[index]?.collectAsState() ?: return@items
             val isSelected = selectionMode && manga in selection
-            val displayTitle = if (translateTitles) {
-                translatedTitles[manga.id] ?: manga.title
-            } else {
-                manga.title
-            }
-
-            if (translateTitles) {
-                onMangaVisible(manga)
-            }
 
             BrowseSourceComfortableGridItem(
                 manga = manga,
-                displayTitle = displayTitle,
+                displayTitle = manga.title,
                 onClick = { onMangaClick(manga) },
                 onLongClick = { onMangaLongClick(manga) },
                 isSelected = isSelected,

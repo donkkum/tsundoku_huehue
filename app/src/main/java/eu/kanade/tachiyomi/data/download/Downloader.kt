@@ -8,8 +8,6 @@ import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.data.download.model.Download
 import eu.kanade.tachiyomi.data.library.LibraryUpdateNotifier
 import eu.kanade.tachiyomi.data.notification.NotificationHandler
-import eu.kanade.tachiyomi.data.translation.TranslationJob
-import eu.kanade.tachiyomi.data.translation.TranslationService
 import eu.kanade.tachiyomi.jsplugin.source.JsSource
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.UnmeteredSource
@@ -63,7 +61,6 @@ import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.domain.track.interactor.GetTracks
-import tachiyomi.domain.translation.service.TranslationPreferences
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -87,8 +84,6 @@ class Downloader(
     private val chapterCache: ChapterCache = Injekt.get(),
     private val downloadPreferences: DownloadPreferences = Injekt.get(),
     private val novelDownloadPreferences: NovelDownloadPreferences = Injekt.get(),
-    private val translationPreferences: TranslationPreferences = Injekt.get(),
-    private val translationService: TranslationService = Injekt.get(),
     private val xml: XML = Injekt.get(),
     private val getCategories: GetCategories = Injekt.get(),
     private val getTracks: GetTracks = Injekt.get(),
@@ -661,21 +656,6 @@ class Downloader(
             DiskUtil.createNoMediaFile(tmpDir, context)
 
             download.status = Download.State.DOWNLOADED
-
-            // Queue for translation if enabled and is a novel source
-            if (download.source.isNovelSource() &&
-                translationPreferences.translationEnabled().get() &&
-                translationPreferences.autoTranslateDownloads().get()
-            ) {
-                if (manga != null && chapter != null) {
-                    translationService.enqueue(
-                        manga = manga,
-                        chapter = chapter,
-                        priority = TranslationService.PRIORITY_LOW,
-                    )
-                    TranslationJob.start(context)
-                }
-            }
         } catch (error: Throwable) {
             if (error is CancellationException) throw error
             // If the page list threw, it will resume here

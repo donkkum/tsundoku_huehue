@@ -49,7 +49,6 @@ import tachiyomi.data.release.ReleaseServiceImpl
 import tachiyomi.data.source.SourceRepositoryImpl
 import tachiyomi.data.source.StubSourceRepositoryImpl
 import tachiyomi.data.track.TrackRepositoryImpl
-import tachiyomi.data.translation.TranslatedChapterRepositoryImpl
 import tachiyomi.data.updates.UpdatesRepositoryImpl
 import tachiyomi.domain.category.interactor.CreateCategoryWithName
 import tachiyomi.domain.category.interactor.DeleteCategory
@@ -106,7 +105,6 @@ import tachiyomi.domain.track.interactor.GetTracks
 import tachiyomi.domain.track.interactor.GetTracksPerManga
 import tachiyomi.domain.track.interactor.InsertTrack
 import tachiyomi.domain.track.repository.TrackRepository
-import tachiyomi.domain.translation.repository.TranslatedChapterRepository
 import tachiyomi.domain.updates.interactor.ClearUpdatesCache
 import tachiyomi.domain.updates.interactor.GetUpdates
 import tachiyomi.domain.updates.repository.UpdatesRepository
@@ -183,7 +181,7 @@ class DomainModule : InjektModule {
         addFactory { GetBookmarkedChaptersByMangaId(get()) }
         addFactory { GetChapterByUrlAndMangaId(get()) }
         addFactory { UpdateChapter(get()) }
-        addFactory { SetReadStatus(get(), get(), get(), get(), get()) }
+        addFactory { SetReadStatus(get(), get(), get(), get()) }
         addFactory { ShouldUpdateDbChapter() }
         addFactory { SyncChaptersWithSource(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
         addFactory { GetAvailableScanlators(get()) }
@@ -197,7 +195,7 @@ class DomainModule : InjektModule {
         addFactory { RemoveHistory(get()) }
         addFactory { GetTotalReadDuration(get()) }
 
-        addFactory { DeleteDownload(get(), get(), get()) }
+        addFactory { DeleteDownload(get(), get()) }
 
         addFactory { GetExtensionsByType(get(), get()) }
         addFactory { GetExtensionSources(get()) }
@@ -206,9 +204,6 @@ class DomainModule : InjektModule {
         addSingletonFactory<UpdatesRepository> { UpdatesRepositoryImpl(get()) }
         addFactory { GetUpdates(get()) }
         addFactory { ClearUpdatesCache(get()) }
-
-        // Translation
-        addSingletonFactory<TranslatedChapterRepository> { TranslatedChapterRepositoryImpl(get(), get()) }
 
         addSingletonFactory<SourceRepository> { SourceRepositoryImpl(get(), get()) }
         addSingletonFactory<StubSourceRepository> { StubSourceRepositoryImpl(get()) }

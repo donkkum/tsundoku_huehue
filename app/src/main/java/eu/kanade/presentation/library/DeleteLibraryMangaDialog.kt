@@ -23,7 +23,6 @@ fun DeleteLibraryMangaDialog(
         removeFromLibrary: Boolean,
         deleteDownloads: Boolean,
         clearChaptersFromDb: Boolean,
-        deleteTranslations: Boolean,
         clearCovers: Boolean,
         clearDescriptions: Boolean,
         clearTags: Boolean,
@@ -32,7 +31,6 @@ fun DeleteLibraryMangaDialog(
     var removeFromLibrary by remember { mutableStateOf(false) }
     var deleteDownloads by remember { mutableStateOf(false) }
     var clearChaptersFromDb by remember { mutableStateOf(false) }
-    var deleteTranslations by remember { mutableStateOf(false) }
     var clearCovers by remember { mutableStateOf(false) }
     var clearDescriptions by remember { mutableStateOf(false) }
     var clearTags by remember { mutableStateOf(false) }
@@ -49,7 +47,6 @@ fun DeleteLibraryMangaDialog(
         removeFromLibrary,
         deleteDownloads,
         clearChaptersFromDb,
-        deleteTranslations,
         clearCovers,
         clearDescriptions,
         clearTags,
@@ -60,7 +57,6 @@ fun DeleteLibraryMangaDialog(
                 add(CheckboxItem(MR.strings.downloaded_chapters, deleteDownloads, { deleteDownloads = it }))
             }
             add(CheckboxItem(TDMR.strings.chapters_from_database, clearChaptersFromDb, { clearChaptersFromDb = it }))
-            add(CheckboxItem(TDMR.strings.translated_chapters, deleteTranslations, { deleteTranslations = it }))
             add(CheckboxItem(TDMR.strings.action_clear_covers, clearCovers, { clearCovers = it }))
             add(CheckboxItem(TDMR.strings.action_clear_descriptions, clearDescriptions, { clearDescriptions = it }))
             add(CheckboxItem(TDMR.strings.action_clear_tags, clearTags, { clearTags = it }))
@@ -68,7 +64,7 @@ fun DeleteLibraryMangaDialog(
     }
 
     val anyChecked = removeFromLibrary || deleteDownloads || clearChaptersFromDb ||
-        deleteTranslations || clearCovers || clearDescriptions || clearTags
+        clearCovers || clearDescriptions || clearTags
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
@@ -86,7 +82,6 @@ fun DeleteLibraryMangaDialog(
                         removeFromLibrary,
                         deleteDownloads && !containsLocalManga,
                         clearChaptersFromDb,
-                        deleteTranslations,
                         clearCovers,
                         clearDescriptions,
                         clearTags,

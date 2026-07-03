@@ -182,7 +182,6 @@ data object LibraryTab : Tab {
                         }
                         screenModel.clearSelection()
                     },
-                    onTranslateClicked = screenModel::translateSelectedNovels,
                 )
             },
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
@@ -299,7 +298,6 @@ data object LibraryTab : Tab {
                             deleteManga,
                             deleteChapter,
                             clearChaptersFromDb,
-                            deleteTranslations,
                             clearCovers,
                             clearDescriptions,
                             clearTags,
@@ -309,7 +307,6 @@ data object LibraryTab : Tab {
                             deleteManga,
                             deleteChapter,
                             clearChaptersFromDb,
-                            deleteTranslations,
                             clearCovers,
                             clearDescriptions,
                             clearTags,
@@ -326,7 +323,6 @@ data object LibraryTab : Tab {
                             deleteManga,
                             deleteChapter,
                             clearChaptersFromDb,
-                            deleteTranslations,
                             clearCovers,
                             clearDescriptions,
                             clearTags,
@@ -336,7 +332,6 @@ data object LibraryTab : Tab {
                             deleteFromLibrary = deleteManga,
                             deleteChapters = deleteChapter,
                             clearChaptersFromDb = clearChaptersFromDb,
-                            deleteTranslations = deleteTranslations,
                             clearCovers = clearCovers,
                             clearDescriptions = clearDescriptions,
                             clearTags = clearTags,

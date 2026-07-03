@@ -200,9 +200,6 @@ data object NovelsTab : Tab {
                         screenModel.clearSelection()
                     },
                     onUpdateClicked = screenModel::openUpdateSelectedDialog,
-                    onTranslateClicked = {
-                        screenModel.translateSelectedNovels()
-                    },
                     onExportEpubClicked = screenModel::openExportEpubDialog,
                 )
             },
@@ -320,7 +317,6 @@ data object NovelsTab : Tab {
                             deleteManga,
                             deleteChapter,
                             clearChaptersFromDb,
-                            deleteTranslations,
                             clearCovers,
                             clearDescriptions,
                             clearTags,
@@ -330,7 +326,6 @@ data object NovelsTab : Tab {
                             deleteManga,
                             deleteChapter,
                             clearChaptersFromDb,
-                            deleteTranslations,
                             clearCovers,
                             clearDescriptions,
                             clearTags,
@@ -347,7 +342,6 @@ data object NovelsTab : Tab {
                             deleteManga,
                             deleteChapter,
                             clearChaptersFromDb,
-                            deleteTranslations,
                             clearCovers,
                             clearDescriptions,
                             clearTags,
@@ -357,7 +351,6 @@ data object NovelsTab : Tab {
                             deleteFromLibrary = deleteManga,
                             deleteChapters = deleteChapter,
                             clearChaptersFromDb = clearChaptersFromDb,
-                            deleteTranslations = deleteTranslations,
                             clearCovers = clearCovers,
                             clearDescriptions = clearDescriptions,
                             clearTags = clearTags,

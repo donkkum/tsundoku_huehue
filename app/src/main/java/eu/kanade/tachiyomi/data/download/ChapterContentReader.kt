@@ -11,8 +11,7 @@ import tachiyomi.domain.manga.model.Manga
 /**
  * Shared utility for reading text content (HTML / TXT) from downloaded chapters.
  *
- * Both [eu.kanade.tachiyomi.data.translation.TranslationService] and
- * [eu.kanade.tachiyomi.data.epub.EpubExportJob] previously had their own
+ * [eu.kanade.tachiyomi.data.epub.EpubExportJob] previously had its own
  * copy of this logic.  This class is the single source of truth.
  *
  * It supports:
