@@ -2,7 +2,12 @@ package eu.kanade.tachiyomi.source.custom
 
 import android.content.Context
 import eu.kanade.domain.source.service.SourcePreferences
+import eu.kanade.tachiyomi.network.GET
+import eu.kanade.tachiyomi.network.awaitSuccess
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -11,6 +16,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import logcat.LogPriority
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.novel.TDMR
@@ -40,9 +46,46 @@ class CustomSourceManager(
 
     private val mutationLock = Any()
 
+    private val domainScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
     init {
         seedDefaultSources()
         loadAllSources()
+        scheduleDomainRefresh()
+    }
+
+    /**
+     * For sources with [CustomSourceConfig.autoUpdateDomain], follows redirects from the stored
+     * base URL once per [DOMAIN_CHECK_INTERVAL_MS]; if the site has moved (final host differs), the
+     * new domain is persisted (source id preserved, so library links survive). A dead old domain
+     * throws and is skipped — the base-URL editor remains the manual fallback.
+     */
+    private fun scheduleDomainRefresh() {
+        domainScope.launch {
+            try {
+                val prefs = context.getSharedPreferences("custom_source_seed", Context.MODE_PRIVATE)
+                val now = System.currentTimeMillis()
+                if (now - prefs.getLong(DOMAIN_CHECK_KEY, 0L) < DOMAIN_CHECK_INTERVAL_MS) return@launch
+                val sources = _customSources.value.filter { it.config.autoUpdateDomain }
+                if (sources.isEmpty()) return@launch
+                sources.forEach { runCatching { refreshDomain(it) } }
+                prefs.edit().putLong(DOMAIN_CHECK_KEY, now).apply()
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Custom source domain refresh failed" }
+            }
+        }
+    }
+
+    private suspend fun refreshDomain(source: CustomNovelSource) {
+        val current = source.baseUrl.toHttpUrlOrNull() ?: return
+        val finalHost = source.client.newCall(GET(source.baseUrl, source.headers)).awaitSuccess()
+            .use { it.request.url.host }
+        if (finalHost.isBlank() || finalHost == current.host) return
+        val newBaseUrl = "${current.scheme}://$finalHost"
+        updateSource(source.id, source.config.copy(baseUrl = newBaseUrl))
+        logcat(LogPriority.INFO) {
+            "Custom source '${source.config.name}' domain updated: ${current.host} -> $finalHost"
+        }
     }
 
     /**
@@ -650,6 +693,10 @@ private const val DEFAULTS_ASSET_DIR = "default_custom_sources"
 
 // Bump when a bundled default config changes so it re-seeds (overwrites) on the next launch.
 private const val SEED_VERSION = 4
+
+// Auto domain-update: throttle the redirect check to once per interval.
+private const val DOMAIN_CHECK_KEY = "last_domain_check"
+private const val DOMAIN_CHECK_INTERVAL_MS = 12L * 60 * 60 * 1000
 
 /** Turns a JSON decode failure into a readable, field-aware message for the import dialog. */
 internal fun customSourceFriendlyParseError(e: Throwable): String {
