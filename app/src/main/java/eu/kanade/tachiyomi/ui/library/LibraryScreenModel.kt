@@ -774,10 +774,14 @@ class LibraryScreenModel(
                 val cached = itemCache[manga.id]
                 val cachedRef = itemCacheMangaRef[manga.id]
 
-                val dlCount = if (preferences.downloadBadge) {
-                    (downloadCounts[manga.id] ?: 0).toLong()
-                } else {
-                    0L
+                val dlCount = when {
+                    // Local entries have all their chapters on-device already, so every chapter
+                    // counts as downloaded. Shown regardless of the download-badge preference since
+                    // being fully offline is intrinsic to a local entry (the download cache only
+                    // tracks the downloads folder and would otherwise report 0 for local).
+                    manga.manga.isLocal() || manga.manga.isLocalNovel() -> manga.totalChapters
+                    preferences.downloadBadge -> (downloadCounts[manga.id] ?: 0).toLong()
+                    else -> 0L
                 }
 
                 if (cached != null && cachedRef === manga && cached.downloadCount == dlCount) {

@@ -713,7 +713,7 @@ class MangaScreenModel(
         manga: Manga,
     ): List<ChapterList.Item> {
         return map { chapter ->
-            val isMangaLocal = manga.isLocal()
+            val isMangaLocal = manga.isLocal() || manga.isLocalNovel()
             val activeDownload = if (isMangaLocal) {
                 null
             } else {
