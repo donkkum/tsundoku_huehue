@@ -1,38 +1,24 @@
 <div align="center">
 
-<a href="https://tsundoku-otaku.github.io">
-    <img src="./.github/assets/logo.png" alt="Tsundoku logo" title="Tsundoku logo" width="80"/>
-</a>
+<img src="./.github/assets/logo.png" alt="Tsuntsun logo" title="Tsuntsun logo" width="80"/>
 
-# Tsundoku [App](#)
+# Tsuntsun
 
 ### Full-featured reader
-Discover and read novels and more – easier than ever on your Android device.
-
-[![Discord server](https://img.shields.io/discord/1475219284551536653.svg?label=&labelColor=6A7EC2&color=7389D8&logo=discord&logoColor=FFFFFF)](https://discord.gg/RycBkEgrPE)
-[![GitHub downloads](https://img.shields.io/github/downloads/tsundoku-otaku/tsundoku/total?label=downloads&labelColor=27303D&color=0D1117&logo=github&logoColor=FFFFFF&style=flat)](https://tsundoku-otaku.github.io/download)
-
-[![CI](https://img.shields.io/github/actions/workflow/status/tsundoku-otaku/tsundoku/build.yml?labelColor=27303D)](https://github.com/tsundoku-otaku/tsundoku/actions/workflows/build_push.yml)
-[![License: Apache-2.0](https://img.shields.io/github/license/tsundoku-otaku/tsundoku?labelColor=27303D&color=0877d2)](/LICENSE)
-[![Translation status](https://img.shields.io/weblate/progress/tsundoku?labelColor=27303D&color=946300)](https://hosted.weblate.org/engage/tsundoku/)
-
-Upstream Weblate:  
-[![Translation status](https://img.shields.io/weblate/progress/mihon?labelColor=27303D&color=946300)](https://hosted.weblate.org/engage/mihon/)
-
-## Download
-
-[![Tsundoku Stable](https://img.shields.io/github/release/tsundoku-otaku/tsundoku.svg?maxAge=3600&label=Stable&labelColor=06599d&color=043b69)](https://tsundoku-otaku.github.io/download)
-[![Tsundoku Beta](https://img.shields.io/github/v/release/tsundoku-otaku/tsundoku-preview.svg?maxAge=3600&label=Beta&labelColor=2c2c47&color=1c1c39)](https://tsundoku-otaku.github.io/download)
+Discover and read novels and more on your Android device.
 
 *Requires Android 8.0 or higher.*
+
+Forked from [tsundoku-otaku/tsundoku](https://github.com/tsundoku-otaku/tsundoku).
 
 ## Features
 
 <div align="left">
 
-* Local reading of content, including: EPUBs, TXT, HTML.
+* Local reading of content, including EPUB, TXT, HTML, MOBI/AZW, and PDF.
+* Import a whole folder of local files, with metadata read from each file.
 * A configurable reader with multiple viewers, font colors and themes, among other settings.
-* Tracker support: [NovelUpdates](https://www.novelupdates.com/) and [NovelList](https://www.novellist.co/), plus the classics: [MyAnimeList](https://myanimelist.net/), [AniList](https://anilist.co/), [Kitsu](https://kitsu.app/), [MangaUpdates](https://mangaupdates.com), [Shikimori](https://shikimori.one), and [Bangumi](https://bgm.tv/) support.
+* Tracker support: NovelUpdates, NovelList, MyAnimeList, AniList, Kitsu, MangaUpdates, Shikimori, and Bangumi.
 * Categories to organize your library.
 * Light and dark themes.
 * Schedule updating your library for new chapters.
@@ -40,37 +26,15 @@ Upstream Weblate:
 * Create backups locally to read offline or to your desired cloud service.
 * Import lnreader backups.
 * Use lnreader extensions.
-* Read-ahead chapter downloads
-* TTS
-* In-app translation of text
+* Read-ahead chapter downloads.
+* TTS.
 * Plus much more...
 
 </div>
 
-## Contributing
-
-[Code of conduct](./CODE_OF_CONDUCT.md) · [Contributing guide](./CONTRIBUTING.md)
-
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
-
-Before reporting a new issue, take a look at the [FAQ](https://tsundoku-otaku.github.io/docs/faq/general), the [changelog](https://tsundoku-otaku.github.io/changelogs/) and the already opened [issues](https://github.com/tsundoku-otaku/tsundoku/issues); if you got any questions, join our [Discord server](https://discord.gg/RycBkEgrPE).
-
-
-### Repositories
-
-[![tsundoku-otaku/website - GitHub](https://github-readme-stats.vercel.app/api/pin/?username=tsundoku-otaku&repo=website&bg_color=161B22&text_color=c9d1d9&title_color=0877d2&icon_color=0877d2&border_radius=8&hide_border=true&description_lines_count=2)](https://github.com/tsundoku-otaku/website/)
-
-### Credits
-
-Thank you to all the people who have contributed!
-
-<a href="https://github.com/tsundoku-otaku/tsundoku/graphs/contributors">
-    <img src="https://contrib.rocks/image?repo=tsundoku-otaku/tsundoku" alt="Tsundoku app contributors" title="Tsundoku app contributors" width="800"/>
-</a>
-
 ### Disclaimer
 
-The developer(s) of this application does not have any affiliation with the content providers available, and this application hosts zero content.
+The developer(s) of this application do not have any affiliation with the content providers available, and this application hosts zero content.
 
 ### License
 
