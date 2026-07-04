@@ -696,7 +696,7 @@ internal const val DEFAULT_TEST_QUERY = "a"
 private const val DEFAULTS_ASSET_DIR = "default_custom_sources"
 
 // Bump when a bundled default config changes so it re-seeds (overwrites) on the next launch.
-private const val SEED_VERSION = 4
+private const val SEED_VERSION = 5
 
 // Auto domain-update: throttle the redirect check to once per interval.
 private const val DOMAIN_CHECK_KEY = "last_domain_check"

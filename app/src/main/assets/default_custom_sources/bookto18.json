@@ -4,7 +4,7 @@
   "language": "ko",
   "isNovel": true,
   "autoUpdateDomain": true,
-  "reverseChapters": true,
+  "reverseChapters": false,
   "popularUrl": "{baseUrl}/bbs/board.php?bo_table=novel&page={page}",
   "searchUrl": "{baseUrl}/bbs/search.php?skin_group=book&sfl=wr_subject&sop=and&stx={query}&page={page}",
   "selectors": {
