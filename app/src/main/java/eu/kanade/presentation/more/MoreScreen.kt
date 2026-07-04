@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.GetApp
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.QueryStats
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Storage
@@ -38,6 +39,8 @@ fun MoreScreen(
     onClickDownloadQueue: () -> Unit,
     onClickCategories: () -> Unit,
     onClickStats: () -> Unit,
+    onClickErrorLog: () -> Unit,
+    errorLogCount: Int,
     onClickDataAndStorage: () -> Unit,
     onClickSettings: () -> Unit,
     onClickSupport: () -> Unit,
@@ -114,6 +117,14 @@ fun MoreScreen(
                     title = stringResource(MR.strings.label_stats),
                     icon = Icons.Outlined.QueryStats,
                     onPreferenceClick = onClickStats,
+                )
+            }
+            item {
+                TextPreferenceWidget(
+                    title = "Error log",
+                    subtitle = if (errorLogCount > 0) "$errorLogCount recent error(s)" else "No errors logged",
+                    icon = Icons.Outlined.ErrorOutline,
+                    onPreferenceClick = onClickErrorLog,
                 )
             }
             item {

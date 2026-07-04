@@ -35,6 +35,7 @@ class ImportLocalFilesJob(private val context: Context, workerParams: WorkerPara
 
     private val parseEpubPreview = ParseEpubPreview()
     private val importEpub = ImportEpub()
+    private val errorLog: eu.kanade.tachiyomi.data.errorlog.ImportErrorLogManager by uy.kohesive.injekt.injectLazy()
 
     override suspend fun doWork(): Result {
         setForegroundSafely()
@@ -93,6 +94,7 @@ class ImportLocalFilesJob(private val context: Context, workerParams: WorkerPara
                 }
 
                 context.cancelNotification(Notifications.ID_IMPORT_LOCAL_PROGRESS)
+                errorLog.logMessages("Local files import", errors)
                 showCompleteNotification(imported, errors.size)
 
                 Result.success(

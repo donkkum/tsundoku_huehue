@@ -95,6 +95,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
     CoroutineWorker(context, workerParams) {
 
     private val sourceManager: SourceManager = Injekt.get()
+    private val errorLog: eu.kanade.tachiyomi.data.errorlog.ImportErrorLogManager = Injekt.get()
     private val libraryPreferences: LibraryPreferences = Injekt.get()
     private val downloadManager: DownloadManager = Injekt.get()
     private val getLibraryManga: GetLibraryManga = Injekt.get()
@@ -453,6 +454,20 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         }
 
         if (failedUpdates.isNotEmpty()) {
+            errorLog.logAll(
+                "Library update",
+                failedUpdates.map { (manga, message) ->
+                    val source = sourceManager.getOrStub(manga.source)
+                    eu.kanade.tachiyomi.data.errorlog.ErrorLogEntry(
+                        timestamp = System.currentTimeMillis(),
+                        category = "Library update",
+                        item = manga.title,
+                        sourceName = source.toString(),
+                        url = runCatching { source.getMangaUrlOrNull(manga.toSManga()) }.getOrNull() ?: manga.url,
+                        message = message ?: "Unknown error",
+                    )
+                },
+            )
             val errorFile = writeErrorFile(failedUpdates)
             notifier.showUpdateErrorNotification(
                 failedUpdates.size,

@@ -25,6 +25,7 @@ class RestoreDownloadsJob(private val context: Context, workerParams: WorkerPara
     CoroutineWorker(context, workerParams) {
 
     private val interactor = RestoreFromDownloads()
+    private val errorLog: eu.kanade.tachiyomi.data.errorlog.ImportErrorLogManager by uy.kohesive.injekt.injectLazy()
 
     override suspend fun doWork(): Result {
         setForegroundSafely()
@@ -51,6 +52,7 @@ class RestoreDownloadsJob(private val context: Context, workerParams: WorkerPara
                 )
 
                 context.cancelNotification(Notifications.ID_RESTORE_DOWNLOADS_PROGRESS)
+                errorLog.logMessages("Restore from downloads", result.errors)
                 showCompleteNotification(result)
 
                 Result.success(

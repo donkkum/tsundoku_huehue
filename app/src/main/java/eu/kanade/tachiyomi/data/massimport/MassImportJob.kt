@@ -99,6 +99,7 @@ class MassImportJob(private val context: Context, workerParams: WorkerParameters
     CoroutineWorker(context, workerParams) {
 
     private val massImportInteractor: eu.kanade.domain.manga.interactor.MassImport by lazy { Injekt.get() }
+    private val errorLog: eu.kanade.tachiyomi.data.errorlog.ImportErrorLogManager by lazy { Injekt.get() }
     private val sourceManager: SourceManager by lazy { Injekt.get() }
     private val networkToLocalManga: NetworkToLocalManga by lazy { Injekt.get() }
     private val getMangaByUrlAndSourceId: GetMangaByUrlAndSourceId by lazy { Injekt.get() }
@@ -779,6 +780,19 @@ class MassImportJob(private val context: Context, workerParams: WorkerParameters
             errored = erroredCount.get(),
             erroredUrls = erroredUrls.toList(),
             errorMessages = errorMessages.toMap(),
+        )
+
+        errorLog.logAll(
+            "Mass import",
+            errorMessages.toMap().map { (url, message) ->
+                eu.kanade.tachiyomi.data.errorlog.ErrorLogEntry(
+                    timestamp = System.currentTimeMillis(),
+                    category = "Mass import",
+                    item = url,
+                    url = url,
+                    message = message,
+                )
+            },
         )
 
         updateBatchProgress(

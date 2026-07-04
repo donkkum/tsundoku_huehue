@@ -6,6 +6,7 @@ import androidx.compose.animation.graphics.vector.AnimatedImageVector
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.rememberScreenModel
@@ -59,6 +60,8 @@ data object MoreTab : Tab {
         val navigator = LocalNavigator.currentOrThrow
         val screenModel = rememberScreenModel { MoreScreenModel() }
         val downloadQueueState by screenModel.downloadQueueState.collectAsState()
+        val errorLog = remember { uy.kohesive.injekt.Injekt.get<eu.kanade.tachiyomi.data.errorlog.ImportErrorLogManager>() }
+        val errorLogEntries by errorLog.entries.collectAsState()
         MoreScreen(
             downloadQueueStateProvider = { downloadQueueState },
             downloadedOnly = screenModel.downloadedOnly,
@@ -68,6 +71,8 @@ data object MoreTab : Tab {
             onClickDownloadQueue = { navigator.push(DownloadQueueScreen()) },
             onClickCategories = { navigator.push(CategoryScreen()) },
             onClickStats = { navigator.push(StatsScreen()) },
+            onClickErrorLog = { navigator.push(ErrorLogScreen()) },
+            errorLogCount = errorLogEntries.size,
             onClickDataAndStorage = { navigator.push(SettingsScreen(SettingsScreen.Destination.DataAndStorage)) },
             onClickSettings = { navigator.push(SettingsScreen()) },
             onClickSupport = { navigator.push(SettingsScreen()) },

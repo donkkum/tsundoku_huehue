@@ -78,6 +78,7 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import eu.kanade.domain.manga.interactor.ImportEpub
 import eu.kanade.domain.manga.interactor.ParseEpubPreview
+import eu.kanade.tachiyomi.data.errorlog.ImportErrorLogManager
 import eu.kanade.tachiyomi.data.library.ImportLocalFilesJob
 import eu.kanade.tachiyomi.util.system.workManager
 import eu.kanade.presentation.category.visualName
@@ -139,6 +140,7 @@ class ImportEpubScreen(
         val snackbarHostState = remember { SnackbarHostState() }
         val getCategories = remember { Injekt.get<GetCategories>() }
         val importEpub = remember { ImportEpub() }
+        val errorLog = remember { Injekt.get<ImportErrorLogManager>() }
         val parseEpubPreview = remember { ParseEpubPreview() }
 
         val volumeGroups = remember { mutableStateListOf<VolumeGroupState>() }
@@ -530,6 +532,7 @@ class ImportEpubScreen(
                                     errorCount = errors.size,
                                     errors = errors,
                                 )
+                                errorLog.logMessages("Local files import", errors)
                                 successfullyImportedUris = importedUris.distinct()
                             }
                         },
@@ -828,6 +831,7 @@ class ImportEpubScreen(
                                     errorCount = errors.size,
                                     errors = errors,
                                 )
+                                errorLog.logMessages("Local files import", errors)
                                 successfullyImportedUris = importedUris.distinct()
                             }
                         },

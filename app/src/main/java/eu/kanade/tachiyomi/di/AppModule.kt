@@ -152,6 +152,9 @@ class AppModule(val app: Application) : InjektModule {
         // Custom source management
         addSingletonFactory { CustomSourceManager(app) }
 
+        // Import & library-update error log
+        addSingletonFactory { eu.kanade.tachiyomi.data.errorlog.ImportErrorLogManager(app) }
+
         // JS Plugin management (LNReader-style plugins)
         addSingletonFactory { JsPluginManager(app) }
 
