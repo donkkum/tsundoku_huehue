@@ -244,7 +244,16 @@ class ReaderViewModel @JvmOverloads constructor(
             else -> chapters
         }
 
-        val sortedChapters = chaptersForReader.sortedWith(getChapterSort(manga, sortDescending = false))
+        // For novels, order the reader's list by recognized chapter number so next/previous and
+        // infinite scroll always follow reading order — even when the source stored chapters in
+        // reverse (sourceOrder is unreliable for local/custom novel sources, which flips the
+        // prev/next buttons and stops infinite scroll from advancing). Manga keep the source-order
+        // based sort. sourceOrder is only a tie-breaker.
+        val sortedChapters = if (manga.isNovel) {
+            chaptersForReader.sortedWith(compareBy<DomainChapter>({ it.chapterNumber }, { it.sourceOrder }))
+        } else {
+            chaptersForReader.sortedWith(getChapterSort(manga, sortDescending = false))
+        }
 
         sortedChapters
             .run {
