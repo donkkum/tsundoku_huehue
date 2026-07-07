@@ -236,6 +236,16 @@ class NovelViewer(val activity: ReaderActivity) : Viewer {
                 return super.dispatchTouchEvent(ev)
             }
 
+            // Selectable child TextViews (novelTextSelectable) call
+            // requestDisallowInterceptTouchEvent(true) as soon as they're touched, which stops this
+            // scroll view from ever scrolling over text — the reason manual scrolling failed while
+            // programmatic auto-scroll still worked. Ignore the disallow so a vertical drag always
+            // scrolls; long-press selection and its drag handles are unaffected (a stationary
+            // long-press never trips the scroll slop, and handles live in a separate overlay).
+            override fun requestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {
+                super.requestDisallowInterceptTouchEvent(false)
+            }
+
             override fun draw(canvas: Canvas) {
                 try {
                     super.draw(canvas)
