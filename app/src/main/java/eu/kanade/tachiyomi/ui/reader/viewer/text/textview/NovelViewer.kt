@@ -231,19 +231,37 @@ class NovelViewer(val activity: ReaderActivity) : Viewer {
 
     private fun initViews() {
         scrollView = object : NestedScrollView(activity) {
+            private val scrollTouchSlop = android.view.ViewConfiguration.get(activity).scaledTouchSlop
+            private var downX = 0f
+            private var downY = 0f
+
             override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
                 gestureDetector.onTouchEvent(ev)
                 return super.dispatchTouchEvent(ev)
             }
 
-            // Selectable child TextViews (novelTextSelectable) call
-            // requestDisallowInterceptTouchEvent(true) as soon as they're touched, which stops this
-            // scroll view from ever scrolling over text — the reason manual scrolling failed while
-            // programmatic auto-scroll still worked. Ignore the disallow so a vertical drag always
-            // scrolls; long-press selection and its drag handles are unaffected (a stationary
-            // long-press never trips the scroll slop, and handles live in a separate overlay).
+            // A tall selectable content TextView (novelTextSelectable) consumes touch drags for
+            // text selection and tells this scroll view not to intercept them — so manual scrolling
+            // failed over text while programmatic auto-scroll still worked. Ignore that veto AND
+            // explicitly claim any vertical drag here, so a drag always scrolls. Taps (no movement)
+            // still reach the text for menu/selection; long-press selection + handles are unaffected.
             override fun requestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {
                 super.requestDisallowInterceptTouchEvent(false)
+            }
+
+            override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
+                when (ev.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        downX = ev.x
+                        downY = ev.y
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val dy = kotlin.math.abs(ev.y - downY)
+                        val dx = kotlin.math.abs(ev.x - downX)
+                        if (dy > scrollTouchSlop && dy > dx) return true
+                    }
+                }
+                return super.onInterceptTouchEvent(ev)
             }
 
             override fun draw(canvas: Canvas) {
