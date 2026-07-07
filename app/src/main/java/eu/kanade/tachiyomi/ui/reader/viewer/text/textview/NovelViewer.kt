@@ -331,18 +331,26 @@ class NovelViewer(val activity: ReaderActivity) : Viewer {
                 activity.onNovelProgressChanged(chapterProgress)
             }
 
-            if (!inGracePeriod && preferences.novelInfiniteScroll.get()) {
+            if (!inGracePeriod && preferences.novelInfiniteScroll.get() &&
+                !isRestoringScroll && !isLoadingNext
+            ) {
+                // Trigger the next-chapter load when the viewport nears the ABSOLUTE bottom of all
+                // loaded content, instead of gating on being on the "last loaded" chapter. The
+                // current-chapter index can trail the loaded set (e.g. after prefetch/prepend),
+                // which previously left onLastLoaded=false and stopped infinite scroll after a
+                // chapter or two. Anchoring on total scroll height keeps it going.
+                // Only extend once the current last chapter has actually rendered, so we don't
+                // chain-append unrendered (near-zero-height) chapters in a burst while content is
+                // still being laid out.
+                val lastRendered = loadedChapters.lastOrNull()?.isTextSet == true
+                val contentHeight = scrollView.getChildAt(0)?.height ?: 0
                 val autoLoadAt = preferences.novelAutoLoadNextChapterAt.get()
-                val effectiveThreshold = if (autoLoadAt > 0) autoLoadAt / 100f else 0.95f
-
-                val onLastLoaded = currentChapterIndex == (loadedChapters.size - 1).coerceAtLeast(0)
-                if (!isRestoringScroll && chapterProgress >= effectiveThreshold &&
-                    !isLoadingNext &&
-                    onLastLoaded
-                ) {
-                    logcat(LogPriority.DEBUG) {
-                        "NovelViewer: scroll threshold hit (progress=$chapterProgress >= $effectiveThreshold, currentIdx=$currentChapterIndex, loadedCount=${loadedChapters.size})"
-                    }
+                // How close to the end (in viewports) to preload; default ~1 screen, more if the
+                // user set a lower auto-load percentage.
+                val viewports = if (autoLoadAt in 1..99) (1f + (95 - autoLoadAt) / 100f) else 1f
+                val triggerMargin = (scrollView.height * viewports).toInt()
+                val distanceFromBottom = contentHeight - (scrollY + scrollView.height)
+                if (lastRendered && contentHeight > 0 && distanceFromBottom <= triggerMargin) {
                     loadNextChapterIfAvailable()
                 }
             }
@@ -479,7 +487,9 @@ class NovelViewer(val activity: ReaderActivity) : Viewer {
     }
 
     private fun loadNextChapterIfAvailable() {
-        val anchor = loadedChapters.getOrNull(currentChapterIndex)?.chapter
+        // Anchor on the LAST loaded chapter (not the currently-visible one) so infinite scroll keeps
+        // extending past the loaded set even when the visible index trails behind.
+        val anchor = loadedChapters.lastOrNull()?.chapter
             ?: currentChapters?.currChapter ?: run {
             logcat(LogPriority.ERROR) {
                 "NovelViewer: loadNext failed, no anchor (loadedCount=${loadedChapters.size})"
@@ -500,8 +510,7 @@ class NovelViewer(val activity: ReaderActivity) : Viewer {
         scope.launch {
             try {
                 val preparedChapter = activity.viewModel.prepareNextChapterForInfiniteScroll(anchor) ?: run {
-                    logcat(LogPriority.WARN) { "NovelViewer: No next chapter after ${anchor.chapter.name}" }
-                    inlineFeedback.showInlineError("No next chapter available", isPrepend = false)
+                    logcat(LogPriority.DEBUG) { "NovelViewer: No next chapter after ${anchor.chapter.name}" }
                     return@launch
                 }
                 logcat(LogPriority.DEBUG) {
@@ -510,7 +519,7 @@ class NovelViewer(val activity: ReaderActivity) : Viewer {
 
                 if (loadedChapters.any { it.chapter.chapter.id == preparedChapter.chapter.id }) {
                     logcat(LogPriority.DEBUG) {
-                        "NovelViewer: next chapter ${preparedChapter.chapter.id} already loaded"
+                        "NovelViewer: next chapter ${preparedChapter.chapter.name} already loaded"
                     }
                     return@launch
                 }
