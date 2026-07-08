@@ -28,7 +28,11 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.unit.dp
+import eu.kanade.tachiyomi.util.system.toast
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -125,6 +129,7 @@ data class BrowseSourceScreen(
         val skipCoverLoading by sourcePreferences.skipCoverLoading.changes().collectAsState(initial = false)
         val currentPage by screenModel.currentPage.collectAsState()
         var showBackConfirmDialog by remember { mutableStateOf(false) }
+        var showUrlDialog by remember { mutableStateOf(false) }
 
         val navigateUp: () -> Unit = {
             when {
@@ -473,6 +478,9 @@ data class BrowseSourceScreen(
                 onHelpClick = { uriHandler.openUri(Constants.URL_HELP) },
                 onLocalSourceHelpClick = onHelpClick,
                 onOpenFolderClick = onOpenFolderClick,
+                // Only custom (editable-domain) sources can have their base URL updated in-app.
+                onEditSourceUrl = (source as? eu.kanade.tachiyomi.source.custom.CustomNovelSource)
+                    ?.let { { showUrlDialog = true } },
                 selectionMode = state.selectionMode,
                 selection = state.selection,
                 onMangaClick = { manga ->
@@ -675,6 +683,62 @@ data class BrowseSourceScreen(
                     androidx.compose.material3.TextButton(
                         onClick = { showBackConfirmDialog = false },
                     ) {
+                        Text(text = stringResource(MR.strings.action_cancel))
+                    }
+                },
+            )
+        }
+
+        // Quick "site moved to a new domain" fix: enter a new base URL for a custom source.
+        if (showUrlDialog) {
+            val customSource = source as? eu.kanade.tachiyomi.source.custom.CustomNovelSource
+            var urlInput by remember { mutableStateOf(customSource?.baseUrl.orEmpty()) }
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showUrlDialog = false },
+                title = { Text(text = stringResource(tachiyomi.i18n.novel.TDMR.strings.update_source_url_title)) },
+                text = {
+                    androidx.compose.foundation.layout.Column {
+                        Text(text = stringResource(tachiyomi.i18n.novel.TDMR.strings.update_source_url_message))
+                        androidx.compose.foundation.layout.Spacer(
+                            modifier = androidx.compose.ui.Modifier.height(12.dp),
+                        )
+                        OutlinedTextField(
+                            value = urlInput,
+                            onValueChange = { urlInput = it },
+                            label = { Text("https://example.com") },
+                            singleLine = true,
+                            modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                        )
+                    }
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(
+                        enabled = customSource != null,
+                        onClick = {
+                            val newUrl = urlInput.trim().trimEnd('/')
+                            showUrlDialog = false
+                            val config = customSource?.config ?: return@TextButton
+                            if (newUrl.isBlank() || newUrl == config.baseUrl.trimEnd('/')) return@TextButton
+                            val manager = Injekt.get<eu.kanade.tachiyomi.source.custom.CustomSourceManager>()
+                            val result = manager.updateSource(customSource.id, config.copy(baseUrl = newUrl))
+                            if (result.isSuccess) {
+                                context.toast(
+                                    context.stringResource(
+                                        tachiyomi.i18n.novel.TDMR.strings.update_source_url_updated,
+                                    ),
+                                )
+                                // Re-open the browse screen so it resolves the updated source instance.
+                                navigator.replace(BrowseSourceScreen(sourceId, listingQuery))
+                            } else {
+                                context.toast(result.exceptionOrNull()?.message ?: "Failed to update URL")
+                            }
+                        },
+                    ) {
+                        Text(text = stringResource(MR.strings.action_ok))
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { showUrlDialog = false }) {
                         Text(text = stringResource(MR.strings.action_cancel))
                     }
                 },

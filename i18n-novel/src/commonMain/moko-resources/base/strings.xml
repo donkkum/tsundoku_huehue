@@ -8,6 +8,10 @@
     nav_zone_prev: Prev
      -->
     <string name="action_clear_custom_metadata">Clear custom metadata</string>
+    <string name="action_update_source_url">Enter new source URL</string>
+    <string name="update_source_url_title">Update source URL</string>
+    <string name="update_source_url_message">This source\'s site may have moved to a new domain. Enter the new base URL to update it.</string>
+    <string name="update_source_url_updated">Source URL updated</string>
     <string name="clear_custom_metadata_confirm">Remove your manually edited author, artist, description, tags and status, then restore the source values?</string>
     <string name="edit_original_source_values">Original source values</string>
     <string name="edit_label_tags">Tags</string>

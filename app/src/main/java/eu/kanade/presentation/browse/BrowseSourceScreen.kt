@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.SnackbarDuration
@@ -52,6 +53,9 @@ fun BrowseSourceContent(
     onHelpClick: () -> Unit,
     onLocalSourceHelpClick: () -> Unit,
     onOpenFolderClick: () -> Unit = {},
+    // Non-null for editable-domain (custom) sources: lets the user enter a new base URL from the
+    // empty screen when the site has moved to a new domain.
+    onEditSourceUrl: (() -> Unit)? = null,
     onMangaClick: (Manga) -> Unit,
     onMangaLongClick: (Manga) -> Unit,
     selectionMode: Boolean = false,
@@ -118,7 +122,7 @@ fun BrowseSourceContent(
                         onClick = onLocalSourceHelpClick,
                     ),
                 )
-                else -> listOf(
+                else -> listOfNotNull(
                     EmptyScreenAction(
                         stringRes = MR.strings.action_retry,
                         icon = Icons.Outlined.Refresh,
@@ -129,6 +133,13 @@ fun BrowseSourceContent(
                         icon = Icons.Outlined.Public,
                         onClick = onWebViewClick,
                     ),
+                    onEditSourceUrl?.let {
+                        EmptyScreenAction(
+                            stringRes = TDMR.strings.action_update_source_url,
+                            icon = Icons.Outlined.Link,
+                            onClick = it,
+                        )
+                    },
                     EmptyScreenAction(
                         stringRes = MR.strings.label_help,
                         icon = Icons.AutoMirrored.Outlined.HelpOutline,
